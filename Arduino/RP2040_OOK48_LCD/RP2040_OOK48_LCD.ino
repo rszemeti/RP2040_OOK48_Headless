@@ -1,5 +1,6 @@
 
 // OOK48 Encoder and Decoder LCD version
+// Plus Beacon Decoder
 // Colin Durbridge G4EML 2025
 
 
@@ -42,11 +43,22 @@ void setup()
     digitalWrite(KEYPIN,0);
     pinMode(TXPIN,OUTPUT);
     digitalWrite(TXPIN,0);
-    mode = RX;  
-    RxInit();
-    TxMessNo = 0;
-    TxInit();
-    attachInterrupt(PPSINPUT,ppsISR,RISING);
+    initGUI();
+    app = getApp(); 
+    if(app == OOK48)
+     {
+       mode = RX;  
+       RxInit();
+       TxMessNo = 0;
+       TxInit();
+       attachInterrupt(PPSINPUT,ppsISR,RISING);
+     }
+     else           //Beacon Decoder
+     {
+       beaconMode = JT4;
+       JT4Init();
+     }
+
 }
 
 //Interrupt called every symbol time to update the Key output. 
@@ -124,7 +136,7 @@ void setup1()
 {
   Serial2.setRX(GPSRXPin);              //Configure the GPIO pins for the GPS module
   Serial2.setTX(GPSTXPin);
-  while(settings.baudMagic != 42)                   //wait for core zero to initialise the baud rate for GPS. 
+  while((settings.baudMagic != 42) || (app == 255))                   //wait for core zero to initialise 
    {
     delay(1);
    }
@@ -143,7 +155,7 @@ void setup1()
 
   gpsPointer = 0;
   waterRow = 0;
-  initGUI();                        //initialise the GUI screen
+  homeScreen();
 }
 
 

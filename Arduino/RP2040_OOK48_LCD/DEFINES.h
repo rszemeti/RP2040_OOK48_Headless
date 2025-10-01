@@ -1,4 +1,4 @@
-#define VERSION "Version 0.11"
+#define VERSION "Version 0.20"
 
 #define GPSTXPin 4                      //Serial data to GPS module 
 #define GPSRXPin 5                      //Serial data from GPS module
@@ -91,5 +91,33 @@
 #define TXINTERVAL 111111           //9 symbols per second in microseconds
 
 #define LOCTOKEN 0x86
+
+
+// Beacon Decoder Defines
+//JT4G Detection Values
+
+#define JT4SAMPLERATE 4480 * OVERSAMPLE   //4480 samples per second * oversample. FFT Bandwidth of 0-2240 Hz
+#define JT4OVERSAMPLERATE JT4SAMPLERATE * OVERSAMPLE
+#define JT4TONESPACING 72                //tone spacing in number of bins. 315 / 4.375 = 72
+#define JT4TONE0 183                      //tone zero 183 * 4.375 = 800.625Hz 
+#define JT4TONETOLERANCE 22               //Tone tolerance 22 * 4.375 = +- 96Hz 
+#define JT4CACHESIZE 240                 // 240 tone decode samples is approx 55 Seconds
+#define JT4SYMBOLCOUNT 207              //number of symbols in JT4 message
+#define JT4BITCOUNT 206                 //number of bits in JT4 Message
+#define JT4HZPERBIN 4.375              //Hertz per bin. Used to generate displayed spectrum. 
+#define JT4SNBINS 571.00                //number of bins for 2.5Khz noise bandwidth
+
+//PI4 Detection Values
+
+#define PI4SAMPLERATE 6144 * OVERSAMPLE  //6144 samples per second * oversample FFT Bandwidth of 0-3072 Hz
+#define PI4OVERSAMPLERATE PI4SAMPLERATE * OVERSAMPLE
+#define PI4TONESPACING 39               //tone spacing in number of bins. 234 / 6 = 39
+#define PI4TONE0 114                     //tone zero 114 * 6 = 684 Hz 
+#define PI4TONETOLERANCE 12               //Tone tolerance 12 * 6 = +- 72Hz 
+#define PI4CACHESIZE 180                // 180 tone decode samples is approx 30 Seconds
+#define PI4SYMBOLCOUNT 146               //number of symbols in PI4 message
+#define PI4BITCOUNT 146                  //number of bits in PI4 Message
+#define PI4HZPERBIN 6                   //Hertz per bin. Used to generate displayed spectrum. 
+#define PI4SNBINS 416.00                //number of bins for 2.5Khz noise bandwidth
 
 

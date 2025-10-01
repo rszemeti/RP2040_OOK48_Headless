@@ -19,7 +19,6 @@ void initGUI(void)
    {
     touch_calibrate(0);
    }
-  homeScreen();
 }
 
 void homeScreen(void)
