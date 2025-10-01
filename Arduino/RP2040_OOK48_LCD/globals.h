@@ -21,7 +21,7 @@ struct eepromstruct settings;
 
 enum decodemodes {NORMALMODE,ALTMODE};
 
-enum core1Message {GENPLOT,DRAWSPECTRUM,DRAWWATERFALL,REDLINE,CYANLINE,MESSAGE,TMESSAGE,ERROR};         //messages for control of Core 1 from Core 2
+enum core1Message {GENPLOT,DRAWSPECTRUM,DRAWWATERFALL,REDLINE,CYANLINE,MESSAGE,TMESSAGE,ERROR,SHOWTONE,SHOWTONE1,SHOWTONE2,SHOWTONE3,JTMESSAGE,PIMESSAGE};         //messages for control of Core 1 from Core 2
 
 
 uint dma_chan;                        //DMA Channel Number
@@ -76,6 +76,7 @@ int gpsMonth = -1;
 int gpsYear = -1;
 uint8_t PPSActive = 0;
 long lastTimeUpdate = 0;
+long lastmin;                         // Timing variable
 float latitude = 0;
 float longitude =0;
 char qthLocator[12] = "----------";

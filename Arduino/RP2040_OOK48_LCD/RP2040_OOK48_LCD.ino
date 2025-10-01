@@ -162,14 +162,22 @@ void setup1()
 //Main Loop Core 0. Runs forever. Does most of the work.
 void loop() 
 {
-  if(mode == RX)
+  if(app == OOK48)
    {
-    RxTick();
+     if(mode == RX)
+      {
+        RxTick();
+      }
+     else 
+      {
+        TxTick();
+      }
    }
-   else 
-    {
-     TxTick();
-    }
+   else           //Beacon Decoder
+   {
+     beaconTick();
+   }
+
 }
 
 

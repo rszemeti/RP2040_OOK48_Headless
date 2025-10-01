@@ -18,6 +18,55 @@ void JT4Init(void)
   calcLegend();
 }
 
+void beaconTick(void)
+{
+  uint8_t tn;
+
+  if(gpsMin != lastmin)                                         //every minute
+    {
+      lastmin = gpsMin;                                        //Save for next minute 
+      cachePoint =0;                                            //Reset the sample cache ready for another period of received data
+      rp2040.fifo.push(CYANLINE);                               //Ask core 1 to draw a Cyan horizontal line in the spectrum to mark the start of the minute.  
+      sigNoise = -100.00; 
+    }
+   
+   if(dmaReady)                                                 //Do we have a complete buffer of ADC samples ready?
+    {
+      calcSpectrum();                                           //Perform the FFT of the data
+      rp2040.fifo.push(GENPLOT);                                //Ask Core 1 to generate data for the Displays from the FFT results.  
+      rp2040.fifo.push(DRAWSPECTRUM);                           //Ask core 1 to draw the Spectrum Display
+      rp2040.fifo.push(DRAWWATERFALL);                          //Ask core 1 to draw the Waterfall Display      
+      tn=toneDetect();                                          //Detect which tone is present
+
+        BeaconToneCache[cachePoint] = tn;                     //Add the tone index to the Tone cache
+
+        rp2040.fifo.push(SHOWTONE + BeaconToneCache[cachePoint++]);     //Ask Core 1 to highlight the current tone. 
+
+        if(cachePoint == cacheSize)                               //If the Cache is full (54 seconds of tones)
+          {
+            rp2040.fifo.push(REDLINE);                            //Ask core 1 to draw a Red horizontal line in the spectrum to mark the end of the Rx Period.. 
+            cachePoint =0;                                        //Reset ready for the next period 
+            if(beaconMode == JT4)
+            {
+              if(JT4decodeCache())                                     //Try to extract the JT4 message from the 54 seconds of Tone cache.
+                {
+                rp2040.fifo.push(JTMESSAGE);                         //Successfull decode. Ask Core 1 to display the received message  
+                }  
+            }
+
+            if(beaconMode == PI4)
+            {
+              if(PI4decodeCache())                                     //Try to extract the JT4 message from the 54 seconds of Tone cache.
+                {
+                  rp2040.fifo.push(PIMESSAGE);                         //Successfull decode. Ask Core 1 to display the received message 
+                }  
+            }
+          }                                  
+      dmaReady = false;                                         //Clear the flag ready for next time     
+    }
+}
+
+
 //Search the 54 seconds of Tone Cache to try to decode the FT4 message. 
 bool JT4decodeCache(void)
 {
@@ -175,4 +224,71 @@ void JT4unpack(unsigned char *dec)
     }
    }
 
+}
+
+//Find the FFT bin for each of the 4 tones and then determine which tone has the largest signal. Return the corresponding tone index 0 - 4. 
+uint8_t toneDetect(void)
+{
+  double toneMag[4];
+  uint16_t toneBin[4];
+  double sn[4];
+  double signz;
+  uint8_t tone;
+  double mx;
+
+  //search around each averaged tone to find largest magnitude and s/n 
+  for(int i =0; i<4; i++)
+    {
+      findMax( i, &toneMag[i], &sn[i]);
+    }
+
+
+  //find the tone with the best s/n (using s/n compensates for any amplitude slew between tones.)
+  mx = 0;
+  for(int i =0;i<4;i++)
+    {
+      if(sn[i] > mx)
+       {
+        mx=sn[i];
+        tone = i;
+       }
+    }
+  
+  signz = 10 * log10(mx / snBins);         //calculate 2.5KHz s/n for this signal . 
+  if(signz > sigNoise) sigNoise = signz;      //and record the best value
+
+  return tone;
+}
+
+//Search the averaged FFT Bins for the given tone. Return the maximum Magnitude found, its associated bin number and its s/n relative to the adjacent bins.
+void findMax(int tone, double * maxval, double * sn)
+{
+  double tstval=0;
+  double avg=0;
+  uint16_t binnumber=0;
+
+  // find the bin in the tolerance range with the highest signal.
+  for(int i = 0 ; i < (1+toneTolerance *2) ; i++ )
+  {
+    int bin = tone0 + tone*toneSpacing - toneTolerance + i;
+    if(sample[bin] > tstval)
+     {
+      tstval=sample[bin];
+      binnumber = bin;
+     }
+  }
+  
+  //average a few bins either side of the tone to get a noise floor
+   for(int i =0;i < 4;i++ )
+   {
+    int bin = tone0 + tone * toneSpacing - toneTolerance - 5 + i;  //below the current tone band
+    avg = avg + sample[bin];
+    bin = tone0 + tone * toneSpacing + toneTolerance + 1 + i;  //above the current tone band 
+    avg = avg + sample[bin];
+   }
+
+  avg = avg /8;
+
+  *maxval = sample[binnumber];
+  *sn = sample[binnumber] / avg;                  //calculate and return the S/N ratio for the max tone.
 }
