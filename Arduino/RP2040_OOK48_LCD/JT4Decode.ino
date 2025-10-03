@@ -11,6 +11,7 @@ void JT4Init(void)
   bitCount = JT4BITCOUNT;                     //number of bits in Message. 
   hzPerBin = JT4HZPERBIN;
   snBins = JT4SNBINS;
+  numberOfTones = 4;
   dma_init();                       //Initialise and start ADC conversions and DMA transfers. 
   dma_handler();                    //call the interrupt handler once to start transfers
   dmaReady = false;                 //reset the transfer ready flag
@@ -38,9 +39,7 @@ void beaconTick(void)
       rp2040.fifo.push(DRAWWATERFALL);                          //Ask core 1 to draw the Waterfall Display      
       tn=toneDetect();                                          //Detect which tone is present
 
-        BeaconToneCache[cachePoint] = tn;                     //Add the tone index to the Tone cache
-
-        rp2040.fifo.push(SHOWTONE + BeaconToneCache[cachePoint++]);     //Ask Core 1 to highlight the current tone. 
+        BeaconToneCache[cachePoint] = tn;                     //Add the tone index to the Tone cache 
 
         if(cachePoint == cacheSize)                               //If the Cache is full (54 seconds of tones)
           {

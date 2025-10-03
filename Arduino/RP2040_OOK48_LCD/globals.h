@@ -21,7 +21,7 @@ struct eepromstruct settings;
 
 enum decodemodes {NORMALMODE,ALTMODE};
 
-enum core1Message {GENPLOT,DRAWSPECTRUM,DRAWWATERFALL,REDLINE,CYANLINE,MESSAGE,TMESSAGE,ERROR,SHOWTONE,SHOWTONE1,SHOWTONE2,SHOWTONE3,JTMESSAGE,PIMESSAGE};         //messages for control of Core 1 from Core 2
+enum core1Message {GENPLOT,DRAWSPECTRUM,DRAWWATERFALL,REDLINE,CYANLINE,MESSAGE,TMESSAGE,ERROR,JTMESSAGE,PIMESSAGE};         //messages for control of Core 1 from Core 2
 
 
 uint dma_chan;                        //DMA Channel Number
@@ -44,6 +44,7 @@ uint16_t cacheSize;                 // tone decode samples.
 float hzPerBin;
 uint16_t activeBins;
 int overlap = 1;
+int numberOfTones =1;
 
 //Beacon mode variables
 uint16_t toneSpacing;                //tone spacing in number of bins.
@@ -112,7 +113,7 @@ bool sdpresent;
 uint8_t plotData[NUMBEROFBINS];        //Array of Plot points for spectrum display. Log scaled and offset to 0 - SPECHEIGHT and used to display new line.  
 uint8_t lastplotData[NUMBEROFBINS];    //Array of Plot points for last Spectrum display. Used to erase previous line.
 
-uint8_t toneLegend[2];                  // start and end pixels for tone indicator legend
+uint8_t toneLegend[4][2];                  // start and end pixels for tone indicator legend
 
 //Waterfall Display colours. Based on Spectravue values. 
 uint16_t waterColours[256] =

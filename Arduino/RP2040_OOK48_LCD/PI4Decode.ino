@@ -9,6 +9,7 @@ void PI4Init(void)
   bitCount = PI4BITCOUNT;                     //number of bits in Message.
   hzPerBin = PI4HZPERBIN;
   snBins = PI4SNBINS;
+  numberOfTones = 4;
   dma_init();                       //Initialise and start ADC conversions and DMA transfers. 
   dma_handler();                    //call the interrupt handler once to start transfers
   dmaReady = false;                 //reset the transfer ready flag

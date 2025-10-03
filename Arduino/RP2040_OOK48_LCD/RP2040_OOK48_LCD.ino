@@ -51,14 +51,13 @@ void setup()
        RxInit();
        TxMessNo = 0;
        TxInit();
-       attachInterrupt(PPSINPUT,ppsISR,RISING);
      }
      else           //Beacon Decoder
      {
        beaconMode = JT4;
        JT4Init();
      }
-
+      attachInterrupt(PPSINPUT,ppsISR,RISING);
 }
 
 //Interrupt called every symbol time to update the Key output. 
@@ -108,7 +107,9 @@ void ppsISR(void)
 void doPPS(void)
 {
   PPSActive = 3;              //reset 3 second timeout for PPS signal
-  if(mode == RX)
+  if(app == OOK48)            //don't need to do anything with the PPS when running beacon decoder. 
+  {
+   if(mode == RX)
     {
       dma_stop();
       dma_handler();        //call dma handler to reset the DMA timing and restart the transfers
@@ -122,13 +123,13 @@ void doPPS(void)
         cachePoint = 8;        //Reset ready for the first symbol of the second character
       } 
     } 
-  else 
+   else 
     {
       cancel_repeating_timer(&TxIntervalTimer);                           //Stop the symbol timer if it is running. 
       add_repeating_timer_us(-TXINTERVAL,TxIntervalInterrupt,NULL,&TxIntervalTimer);    // re-start the Symbol timer
       TxSymbol();                       //send the first symbol
     }
- 
+  }
 }
 
 //core 1 handles the GUI
@@ -221,6 +222,16 @@ void loop1()
         break;
         case TMESSAGE:
         textPrintChar(TxCharSent,TFT_RED);                               
+        break;
+        case JTMESSAGE:
+        sprintf(m,"%02d:%02d %.0lf :%s",gpsHr,gpsMin, sigNoise,JTmessage);
+        textPrintLine(m);                                 
+        textLine(); 
+        break;
+        case PIMESSAGE:
+        sprintf(m,"%02d:%02d %.0lf :%s",gpsHr,gpsMin, sigNoise,PImessage);
+        textPrintLine(m);                                 
+        textLine(); 
         break;
         case ERROR:
         textPrintChar(decoded,TFT_ORANGE);                                           

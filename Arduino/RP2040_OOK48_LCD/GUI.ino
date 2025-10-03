@@ -459,13 +459,30 @@ void processTouch(void)
 void drawLegend(void)
 {
   tft.fillRect(LEGLEFT,LEGTOP,LEGWIDTH,LEGHEIGHT, TFT_WHITE);
-  tft.fillRect(toneLegend[0]*PIXELSPERBIN, LEGTOP, 1 + toneLegend[1]*PIXELSPERBIN , LEGHEIGHT , TFT_ORANGE);
+  for(int l = 0 ; l < numberOfTones;l++)
+  {
+  tft.fillRect(toneLegend[l][0]*PIXELSPERBIN, LEGTOP, 1 + toneLegend[l][1]*PIXELSPERBIN , LEGHEIGHT , TFT_ORANGE);
+  }
+
 }
 
 void calcLegend(void)
 {
-    toneLegend[0] = TONE800 - toneTolerance;
-    toneLegend[1] = toneTolerance *2;
+   if(app == OOK48)
+   {
+    toneLegend[0][0] = rxTone - toneTolerance;
+    toneLegend[0][1] = toneTolerance *2;   
+   }
+   else
+   {
+    for(int t =0;t < numberOfTones;t++)
+     {
+      toneLegend[t][0] = tone0 + (toneSpacing * t) - toneTolerance;
+      toneLegend[t][1] = toneTolerance *2; 
+     }
+  
+   }
+
 }
 
 void stopButton(void)
