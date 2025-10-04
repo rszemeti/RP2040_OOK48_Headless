@@ -81,11 +81,11 @@
 
 #define TONETOLERANCE 11                                        // 11 * 9  = 99Hz Tolerance
 
-#define NUMBEROFBINS 68                                         //68 bins between STARTFREQ and ENDFREQ
+#define OOKNUMBEROFBINS 68                                         //68 bins between STARTFREQ and ENDFREQ
 
 #define CACHESIZE 8                                           // 8 bits per character
 
-//Tx constants
+//OOK48 Tx constants
 
 #define TXINTERVAL 111111           //9 symbols per second in microseconds
 
@@ -95,28 +95,41 @@
 // Beacon Decoder Defines
 //JT4G Detection Values
 
-#define JT4SAMPLERATE 4480 * OVERSAMPLE   //4480 samples per second * oversample. FFT Bandwidth of 0-2240 Hz
+#define JT4SAMPLERATE 4480 * OVERSAMPLE   //4480 samples per second * oversample. FFT Bandwidth of 0-2240 Hz at 4.375 Hz
 #define JT4OVERSAMPLERATE JT4SAMPLERATE * OVERSAMPLE
-#define JT4TONESPACING 72                //tone spacing in number of bins. 315 / 4.375 = 72
-#define JT4TONE0 183                      //tone zero 183 * 4.375 = 800.625Hz 
-#define JT4TONETOLERANCE 22               //Tone tolerance 22 * 4.375 = +- 96Hz 
+
+ 
 #define JT4CACHESIZE 240                 // 240 tone decode samples is approx 55 Seconds
 #define JT4SYMBOLCOUNT 207              //number of symbols in JT4 message
 #define JT4BITCOUNT 206                 //number of bits in JT4 Message
 #define JT4HZPERBIN 4.375              //Hertz per bin. Used to generate displayed spectrum. 
 #define JT4SNBINS 571.00                //number of bins for 2.5Khz noise bandwidth
 
+#define JT4STARTFREQ 498                                          //first frequency of interest (to nearest 4.375 Hz)
+#define JT4STARTBIN 114                                            // equivalent bin number from 512 FFT bins 
+#define JT4ENDFREQ 1999                                           //last frequency of interest (to nearest 9 Hz)
+#define JT4TONE0 69                                              // 800 Hz is the 69th bin between STARTFREQ and ENDFREQ
+#define JT4TONESPACING 72                                         //tone spacing in number of bins. 315 / 4.375 = 72
+#define JT4TONETOLERANCE 22                                        //  22 * 4.375 = +- 96Hz
+#define JT4NUMBEROFBINS 343                                        //343 bins between STARTFREQ and ENDFREQ
+
+
 //PI4 Detection Values
 
-#define PI4SAMPLERATE 6144 * OVERSAMPLE  //6144 samples per second * oversample FFT Bandwidth of 0-3072 Hz
+#define PI4SAMPLERATE 6144 * OVERSAMPLE             //6144 samples per second * oversample FFT Bandwidth of 0-3072 Hz at 6 Hz
 #define PI4OVERSAMPLERATE PI4SAMPLERATE * OVERSAMPLE
-#define PI4TONESPACING 39               //tone spacing in number of bins. 234 / 6 = 39
-#define PI4TONE0 114                     //tone zero 114 * 6 = 684 Hz 
-#define PI4TONETOLERANCE 12               //Tone tolerance 12 * 6 = +- 72Hz 
+ 
 #define PI4CACHESIZE 180                // 180 tone decode samples is approx 30 Seconds
 #define PI4SYMBOLCOUNT 146               //number of symbols in PI4 message
 #define PI4BITCOUNT 146                  //number of bits in PI4 Message
 #define PI4HZPERBIN 6                   //Hertz per bin. Used to generate displayed spectrum. 
 #define PI4SNBINS 416.00                //number of bins for 2.5Khz noise bandwidth
 
+#define PI4STARTFREQ 498                                          //first frequency of interest (to nearest 6 Hz)
+#define PI4STARTBIN 83                                            // equivalent bin number from 512 FFT bins 
+#define PI4ENDFREQ 1500                                           //last frequency of interest (to nearest 6 Hz)
+#define PI4TONE0 17                                               // 600 Hz is the 17th bin between STARTFREQ and ENDFREQ
+#define PI4TONESPACING 39                                         //tone spacing in number of bins. 234 / 6 = 39 
+#define PI4TONETOLERANCE 12                                        //Tone tolerance 12 * 6 = +- 72Hz 
+#define PI4NUMBEROFBINS 167                                        //167 bins between STARTFREQ and ENDFREQ
 

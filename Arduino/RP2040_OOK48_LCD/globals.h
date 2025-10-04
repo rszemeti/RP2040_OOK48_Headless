@@ -45,6 +45,7 @@ float hzPerBin;
 uint16_t activeBins;
 int overlap = 1;
 int numberOfTones =1;
+int numberOfBins;
 
 //Beacon mode variables
 uint16_t toneSpacing;                //tone spacing in number of bins.
@@ -58,7 +59,7 @@ char PImessage[9];                      //decoded PI4 Message
 float sigNoise;
 float snBins;
 float threshold;
-float toneCache[NUMBEROFBINS][CACHESIZE *2];          // Array large enough for the biggest tone magnitude cache
+float toneCache[JT4NUMBEROFBINS][CACHESIZE *2];          // Array large enough for the biggest tone magnitude cache
 uint16_t cachePoint;                  // Pointer to next cache entry. 
 bool halfRate = false;
 
@@ -85,7 +86,7 @@ char qthLocator[12] = "----------";
 uint16_t buffer[2][NUMBEROFOVERSAMPLES];     //2 DMA buffers to allow one to be processed while the next is being received.
 float sample[NUMBEROFSAMPLES];              //array for the averaged samples 
 float sampleI[NUMBEROFSAMPLES];             //imaginary part for FFT
-float magnitude[NUMBEROFBINS];            //Array for signal spectrum
+float magnitude[JT4NUMBEROFBINS];            //Array for signal spectrum
 
 uint16_t t_x = 0, t_y = 0;            // To store the touch coordinates
 uint16_t textrow;                    //current row for text output

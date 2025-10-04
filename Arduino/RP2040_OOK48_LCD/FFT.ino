@@ -19,7 +19,7 @@ void calcSpectrum(void)
     FFT.compute(FFTDirection::Forward);                        //calculate the FFT. Results are now in the vReal and vImag arrays.
     FFT.complexToMagnitude();                                  //calculate the magnitude of each bin. FFT magnitude results are now in the first half of the sample[] array.
     
-    for(int m=0 ; m < NUMBEROFBINS ; m++)
+    for(int m=0 ; m < numberOfBins ; m++)
       {
         magnitude[m] = sample[STARTBIN + m];                  //copy the bins for the band of interest to the magnitude[] array
       }
@@ -30,7 +30,7 @@ void calcSpectrum(void)
 //Generate the display output array from the magnitude array with log scaling. Add offset and gain to the values.
 void generatePlotData(void)
 {
-  float db[NUMBEROFBINS];
+  float db[numberOfBins];
   float vref = 2048.0;
   static float baselevel;
 
@@ -40,7 +40,7 @@ void generatePlotData(void)
     baselevel = 0;
     }
 
-    for(int p =0;p < NUMBEROFBINS; p++)                         
+    for(int p =0;p < numberOfBins; p++)                         
     {
       db[p]=2*(20*(log10(magnitude[p] / vref)));               //calculate bin amplitude relative to FS in dB
  
@@ -52,10 +52,10 @@ void generatePlotData(void)
     
     if(autolevel)
     {
-      baselevel = baselevel/NUMBEROFBINS;                             //use the average level for the baseline.
+      baselevel = baselevel/numberOfBins;                             //use the average level for the baseline.
     }
 
-    for(int p =0;p<NUMBEROFBINS;p++)
+    for(int p =0;p<numberOfBins;p++)
     {
       db[p] = uint8_t (db[p] - baselevel);
     }
@@ -65,9 +65,9 @@ void generatePlotData(void)
     for (int x = 0; x < SPECWIDTH; x++) 
        {
         // Calculate start and end bin using integer math
-        int startBin = (long)x * NUMBEROFBINS / SPECWIDTH;
-        int endBin = (long)(x + 1) * NUMBEROFBINS / SPECWIDTH - 1;
-        if (endBin >= NUMBEROFBINS) endBin = NUMBEROFBINS - 1;
+        int startBin = (long)x * numberOfBins / SPECWIDTH;
+        int endBin = (long)(x + 1) * numberOfBins / SPECWIDTH - 1;
+        if (endBin >= numberOfBins) endBin = numberOfBins - 1;
         if (endBin < 0) endBin = 0;
 
         // Find maximum value in this range (float)
@@ -84,7 +84,7 @@ void generatePlotData(void)
 
 void saveCache(void)
 {
-  for(int i = 0 ; i < NUMBEROFBINS ; i++ )
+  for(int i = 0 ; i < numberOfBins ; i++ )
   {
      toneCache[i][cachePoint]= magnitude[i];
   }

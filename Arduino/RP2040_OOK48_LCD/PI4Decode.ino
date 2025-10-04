@@ -10,6 +10,7 @@ void PI4Init(void)
   hzPerBin = PI4HZPERBIN;
   snBins = PI4SNBINS;
   numberOfTones = 4;
+  numberOfBins = PI4NUMBEROFBINS;
   dma_init();                       //Initialise and start ADC conversions and DMA transfers. 
   dma_handler();                    //call the interrupt handler once to start transfers
   dmaReady = false;                 //reset the transfer ready flag

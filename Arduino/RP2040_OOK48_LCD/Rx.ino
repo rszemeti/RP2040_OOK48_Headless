@@ -8,6 +8,8 @@ void RxInit(void)
   rxTone = TONE800;
   toneTolerance = TONETOLERANCE;
   numberOfTones = 1;
+  numberOfBins = OOKNUMBEROFBINS;
+
   calcLegend();
   dma_init();                       //Initialise and start ADC conversions and DMA transfers. 
   dma_handler();                    //call the interrupt handler once to start transfers

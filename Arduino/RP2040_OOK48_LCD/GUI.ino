@@ -457,7 +457,7 @@ void drawLegend(void)
   tft.fillRect(LEGLEFT,LEGTOP,LEGWIDTH,LEGHEIGHT, TFT_WHITE);
   for(int l = 0 ; l < numberOfTones;l++)
   {
-  tft.fillRect(toneLegend[l][0]*3, LEGTOP, 1 + toneLegend[l][1]*3 , LEGHEIGHT , TFT_ORANGE);
+  tft.fillRect(toneLegend[l][0], LEGTOP, 1 + toneLegend[l][1] , LEGHEIGHT , TFT_ORANGE);
   }
 
 }
@@ -466,15 +466,15 @@ void calcLegend(void)
 {
    if(app == OOK48)
    {
-    toneLegend[0][0] = rxTone - toneTolerance;
-    toneLegend[0][1] = toneTolerance *2;   
+    toneLegend[0][0] = (rxTone - toneTolerance)*  SPECWIDTH /numberOfBins ;
+    toneLegend[0][1] = (toneTolerance *2) * SPECWIDTH/ numberOfBins ;   
    }
    else
    {
     for(int t =0;t < numberOfTones;t++)
      {
-      toneLegend[t][0] = tone0 + (toneSpacing * t) - toneTolerance;
-      toneLegend[t][1] = toneTolerance *2; 
+      toneLegend[t][0] = (tone0 + (toneSpacing * t) - toneTolerance) *  SPECWIDTH /numberOfBins;
+      toneLegend[t][1] = (toneTolerance *2) *  SPECWIDTH /numberOfBins; 
      }
   
    }
