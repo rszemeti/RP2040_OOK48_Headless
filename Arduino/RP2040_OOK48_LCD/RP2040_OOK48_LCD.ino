@@ -54,8 +54,16 @@ void setup()
      }
      else           //Beacon Decoder
      {
+      if(app == PI4)
+      {
+       beaconMode = PI4;
+       PI4Init();
+      }
+      else 
+      {
        beaconMode = JT4;
        JT4Init();
+      }
      }
       attachInterrupt(PPSINPUT,ppsISR,RISING);
 }

@@ -190,12 +190,18 @@ void drawButtons(void)
 {
   tft.fillRect(BUTSLEFT,BUTSTOP,BUTSWIDTH,BUTSHEIGHT,TFT_BLACK);
 
+  if(app >= BEACONJT4)               //remove the Tx Buttons when in Beacon Decoder mode
+   {
+     strcpy(BUTLabel[4],"");
+     strcpy(BUTLabel[5],"");     
+   }
+
 // Draw the keys
+
   int tsz;
   for (uint8_t i= 0; i< 6; i++) 
   {
       char blank[2] = " ";
-
       tft.setFreeFont(BUTLABEL_FONT);
 
       if(i == 5)
@@ -357,52 +363,58 @@ void processTouch(void)
       break;
 
       case 4:
-      noTouch = false;
-      messageChanging = true;
-      TxMessNo = doMemPad();
-      getText("Enter TX Message", settings.TxMessage[TxMessNo], 30);
-      saveSettings();
-      homeScreen();
-      if(mode == TX)
-       {
-         mode = RX;
-         digitalWrite(KEYPIN, 0);
-         cancel_repeating_timer(&TxIntervalTimer);
-         mode = TX;
-         TxInit();
-         BUTkey[5].drawButton(0,"Rx");
-         displayTx();        
-       }
-       messageChanging = false;
+      if(app == OOK48)
+      {
+        noTouch = false;
+        messageChanging = true;
+        TxMessNo = doMemPad();
+        getText("Enter TX Message", settings.TxMessage[TxMessNo], 30);
+        saveSettings();
+        homeScreen();
+        if(mode == TX)
+         {
+           mode = RX;
+           digitalWrite(KEYPIN, 0);
+           cancel_repeating_timer(&TxIntervalTimer);
+           mode = TX;
+           TxInit();
+           BUTkey[5].drawButton(0,"Rx");
+           displayTx();        
+         }
+        messageChanging = false;
+      }
       break;
 
       case 5:
-      noTouch = false;
-      if(mode == RX)
-       {
-         mode = TX;
-         TxInit();
-         digitalWrite(TXPIN, 1);
-         BUTkey[5].drawButton(0,"Rx");
-         displayTx();
+      if(app == OOK48)
+        {
+        noTouch = false;
+        if(mode == RX)
+         {
+           mode = TX;
+           TxInit();
+           digitalWrite(TXPIN, 1);
+           BUTkey[5].drawButton(0,"Rx");
+           displayTx();
 
-         TxPointer = 0;
-         TxBitPointer = 0;
-       }
-       else 
-       {
-         mode = RX;
-         digitalWrite(KEYPIN, 0);
-         digitalWrite(TXPIN, 0);
-         cancel_repeating_timer(&TxIntervalTimer);
-         tft.setFreeFont(BUTLABEL_FONT);
-         BUTkey[5].drawButton(0,"Tx");
-         BUTkey[4].drawButton(0,"Set Tx");
-         clearSpectrum();
-         drawLegend();
-         waterRow = 0;
-         textPrintChar(13,TFT_BLUE);
-       }
+           TxPointer = 0;
+           TxBitPointer = 0;
+         }
+         else 
+         {
+           mode = RX;
+           digitalWrite(KEYPIN, 0);
+           digitalWrite(TXPIN, 0);
+           cancel_repeating_timer(&TxIntervalTimer);
+           tft.setFreeFont(BUTLABEL_FONT);
+           BUTkey[5].drawButton(0,"Tx");
+           BUTkey[4].drawButton(0,"Set Tx");
+           clearSpectrum();
+           drawLegend();
+           waterRow = 0;
+           textPrintChar(13,TFT_BLUE);
+         }
+        }
       break;
     }
  }
@@ -422,7 +434,7 @@ void processTouch(void)
       return;
     }
 
-   if(touchZone(WATERLEFT, WATERTOP, WATERWIDTH, WATERHEIGHT)&& noTouch)
+   if(touchZone(WATERLEFT, WATERTOP, WATERWIDTH, WATERHEIGHT)&& noTouch && app == OOK48)
     {
       noTouch = false;
       switch(toneTolerance)

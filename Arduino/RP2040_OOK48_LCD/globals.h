@@ -29,7 +29,7 @@ bool dmaReady;                        //Flag to indicate a DMA buffer is ready t
 uint8_t bufIndex = 0;                 //Index to the current DMA buffer. Alternates 0/1.
 
 uint8_t app = 255;
-enum apps {OOK48,BEACON};
+enum apps {OOK48,BEACONJT4,BEACONPI4};
 
 uint8_t mode;
 enum modes {RX,TX};
