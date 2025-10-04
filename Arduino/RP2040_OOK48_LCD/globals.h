@@ -110,8 +110,8 @@ bool sdpresent;
 
 
 
-uint8_t plotData[NUMBEROFBINS];        //Array of Plot points for spectrum display. Log scaled and offset to 0 - SPECHEIGHT and used to display new line.  
-uint8_t lastplotData[NUMBEROFBINS];    //Array of Plot points for last Spectrum display. Used to erase previous line.
+uint8_t plotData[SPECWIDTH];        //Array of Plot points for spectrum display. Log scaled and offset to 0 - SPECHEIGHT and used to display new line.  
+uint8_t lastplotData[SPECWIDTH];    //Array of Plot points for last Spectrum display. Used to erase previous line.
 
 uint8_t toneLegend[4][2];                  // start and end pixels for tone indicator legend
 

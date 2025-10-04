@@ -54,13 +54,9 @@ void drawWaterfall(void)
   if(mode == RX)
   {
     if(waterRow < WATERHEIGHT-1) tft.drawFastHLine(WATERLEFT,WATERTOP + waterRow + 1,WATERWIDTH,TFT_WHITE);       //Draw White line acrost the Waterfall to highlight the current position.
-    for(int p=0 ; p < NUMBEROFBINS ; p++)                                              //for each of the data points in the current row
+    for(int p=0 ; p < WATERWIDTH ; p++)                                              //for each of the data points in the current row
     {
-      for(int pc=0;pc<PIXELSPERBIN;pc++)
-      {
-        tft.drawPixel(WATERLEFT + p*PIXELSPERBIN + pc, WATERTOP + waterRow, waterColours[(plotData[p] + 10) *2]);             //draw a pixel of the required colour
-      }
-
+        tft.drawPixel(WATERLEFT + p, WATERTOP + waterRow, waterColours[(plotData[p] + 10) *2]);             //draw a pixel of the required colour
     } 
     waterRow++;                                                                      //Increment the row for next time
     if(waterRow >= WATERHEIGHT) waterRow = 0;                                        //Cycle back to the start at the end of the display. (would be nice to scroll the display but this is too slow)
@@ -80,12 +76,12 @@ void drawSpectrum(void)
 {
   if(mode == RX)
   {
-    for(int p=1 ; p < NUMBEROFBINS ; p++)                                             //for each of the data points in the current row
+    for(int p=1 ; p < SPECWIDTH ; p++)                                             //for each of the data points in the current row
       {
-        tft.drawLine(SPECLEFT + p*PIXELSPERBIN - 1, SPECTOP + SPECHEIGHT - lastplotData[p-1], SPECLEFT + p*PIXELSPERBIN +PIXELSPERBIN, SPECTOP + SPECHEIGHT - lastplotData[p], TFT_CYAN);   //erase previous plot
-        tft.drawLine(SPECLEFT + p*PIXELSPERBIN - 1, SPECTOP + SPECHEIGHT - plotData[p-1], SPECLEFT + p*PIXELSPERBIN +PIXELSPERBIN, SPECTOP + SPECHEIGHT - plotData[p], TFT_RED);            //draw new plot
+        tft.drawLine(SPECLEFT + p - 1, SPECTOP + SPECHEIGHT - lastplotData[p-1], SPECLEFT + p, SPECTOP + SPECHEIGHT - lastplotData[p], TFT_CYAN);   //erase previous plot
+        tft.drawLine(SPECLEFT + p - 1, SPECTOP + SPECHEIGHT - plotData[p-1], SPECLEFT + p, SPECTOP + SPECHEIGHT - plotData[p], TFT_RED);            //draw new plot
       }
-    memcpy(lastplotData , plotData, NUMBEROFBINS);       //need to save this plot so that we can erase it next time (faster than clearing the screen)
+    memcpy(lastplotData , plotData, SPECWIDTH);       //need to save this plot so that we can erase it next time (faster than clearing the screen)
   }  
 }
 
@@ -461,7 +457,7 @@ void drawLegend(void)
   tft.fillRect(LEGLEFT,LEGTOP,LEGWIDTH,LEGHEIGHT, TFT_WHITE);
   for(int l = 0 ; l < numberOfTones;l++)
   {
-  tft.fillRect(toneLegend[l][0]*PIXELSPERBIN, LEGTOP, 1 + toneLegend[l][1]*PIXELSPERBIN , LEGHEIGHT , TFT_ORANGE);
+  tft.fillRect(toneLegend[l][0]*3, LEGTOP, 1 + toneLegend[l][1]*3 , LEGHEIGHT , TFT_ORANGE);
   }
 
 }

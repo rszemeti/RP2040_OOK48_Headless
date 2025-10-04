@@ -14,23 +14,22 @@
 
 #define REPEAT_CAL false              // Set REPEAT_CAL to true instead of false to run calibration again, otherwise it will only be done once.
 
-#define PIXELSPERBIN 3                //number of horizontal pixels per bin for spectrun and waterfall
 #define SPECLEFT 0                    //Spectrum Display Left Edge in Pixels
 #define SPECTOP 0                     //Spectrum Display Top Edge in Pixels
-#define SPECWIDTH NUMBEROFBINS * PIXELSPERBIN          //Spectrum Width in Pixels 
+#define SPECWIDTH 204                 //Spectrum Width in Pixels 
 #define SPECHEIGHT 100                //Spectrum Height in Pixels
 
 #define LEGLEFT 0                     //Legend for spectrum display
 #define LEGTOP 100
-#define LEGWIDTH NUMBEROFBINS * PIXELSPERBIN
+#define LEGWIDTH 204 
 #define LEGHEIGHT 10
 
 #define WATERLEFT 0                   //Waterfall Display Left Edge in Pixels
 #define WATERTOP 110                  //Waterfall Display Top Edge in Pixels
-#define WATERWIDTH NUMBEROFBINS * PIXELSPERBIN         //Waterfall Disply Width in Pixels
+#define WATERWIDTH 204                //Waterfall Disply Width in Pixels
 #define WATERHEIGHT 165               //Waterfall Diaply Height in Pixels
 
-#define TEXTLEFT NUMBEROFBINS * PIXELSPERBIN +5                 //left edge of text output area
+#define TEXTLEFT 209                 //left edge of text output area
 #define TEXTTOP 0                    //top edge of text output area
 #define TEXTWIDTH 480-TEXTLEFT                //width of text output area
 #define TEXTHEIGHT 275               //height of text output area

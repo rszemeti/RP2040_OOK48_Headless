@@ -55,9 +55,9 @@ void generatePlotData(void)
       baselevel = baselevel/NUMBEROFBINS;                             //use the average level for the baseline.
     }
 
-    for(int p=0;p<NUMBEROFBINS;p++)
+    for(int p=0;p<SPECWIDTH;p++)
     {
-      plotData[p]= uint8_t (db[p] - baselevel);  
+      plotData[p]= uint8_t (db[p/3] - baselevel);  
     }
  
 }
