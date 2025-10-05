@@ -2,7 +2,7 @@
 
 void JT4Init(void)
 {
-  sampleRate = JT4SAMPLERATE;                  //samples per second.
+  sampleRate = JT4OVERSAMPLERATE;                  //samples per second.
   toneSpacing = JT4TONESPACING;                //tone spacing in number of bins.
   tone0 = JT4TONE0;                            //tone zero in bins. 
   toneTolerance = JT4TONETOLERANCE;            //Tone tolerance in bins. 
@@ -13,6 +13,8 @@ void JT4Init(void)
   snBins = JT4SNBINS;
   numberOfTones = 4;
   numberOfBins = JT4NUMBEROFBINS;
+  startBin = JT4STARTBIN;
+  
   dma_init();                       //Initialise and start ADC conversions and DMA transfers. 
   dma_handler();                    //call the interrupt handler once to start transfers
   dmaReady = false;                 //reset the transfer ready flag

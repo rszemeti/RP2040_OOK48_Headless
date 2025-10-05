@@ -54,7 +54,7 @@ void setup()
      }
      else           //Beacon Decoder
      {
-      if(app == PI4)
+      if(app == BEACONPI4)
       {
        beaconMode = PI4;
        PI4Init();

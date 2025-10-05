@@ -21,7 +21,7 @@ void calcSpectrum(void)
     
     for(int m=0 ; m < numberOfBins ; m++)
       {
-        magnitude[m] = sample[STARTBIN + m];                  //copy the bins for the band of interest to the magnitude[] array
+        magnitude[m] = sample[startBin + m];                  //copy the bins for the band of interest to the magnitude[] array
       }
 
 }
@@ -65,14 +65,14 @@ void generatePlotData(void)
     for (int x = 0; x < SPECWIDTH; x++) 
        {
         // Calculate start and end bin using integer math
-        int startBin = (long)x * numberOfBins / SPECWIDTH;
+        int strtBin = (long)x * numberOfBins / SPECWIDTH;
         int endBin = (long)(x + 1) * numberOfBins / SPECWIDTH - 1;
         if (endBin >= numberOfBins) endBin = numberOfBins - 1;
         if (endBin < 0) endBin = 0;
 
         // Find maximum value in this range (float)
-        uint8_t maxVal = db[startBin];
-        for (int i = startBin + 1; i <= endBin; i++) 
+        uint8_t maxVal = db[strtBin];
+        for (int i = strtBin + 1; i <= endBin; i++) 
         {
             if (db[i] > maxVal) maxVal = db[i];
         }

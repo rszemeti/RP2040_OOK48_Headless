@@ -74,7 +74,7 @@
 #define BATCAL 587.0                                            //default battery calibration value. (can be reset in config menu)
 
 #define STARTFREQ 495                                          //first frequency of interest (to nearest 9 Hz)
-#define STARTBIN 55                                            // equivalent bin number from 512 FFT bins 
+#define OOKSTARTBIN 55                                            // equivalent bin number from 512 FFT bins 
 #define ENDFREQ 1098                                           //last frequency of interest (to nearest 9 Hz)
 
 #define TONE800 34                                             // 800 Hz is the 34th bin between STARTFREQ and ENDFREQ
@@ -95,7 +95,7 @@
 // Beacon Decoder Defines
 //JT4G Detection Values
 
-#define JT4SAMPLERATE 4480 * OVERSAMPLE   //4480 samples per second * oversample. FFT Bandwidth of 0-2240 Hz at 4.375 Hz
+#define JT4SAMPLERATE 4480              //4480 samples per second * oversample. FFT Bandwidth of 0-2240 Hz at 4.375 Hz
 #define JT4OVERSAMPLERATE JT4SAMPLERATE * OVERSAMPLE
 
  
@@ -116,7 +116,7 @@
 
 //PI4 Detection Values
 
-#define PI4SAMPLERATE 6144 * OVERSAMPLE             //6144 samples per second * oversample FFT Bandwidth of 0-3072 Hz at 6 Hz
+#define PI4SAMPLERATE 6144                             //6144 samples per second * oversample FFT Bandwidth of 0-3072 Hz at 6 Hz
 #define PI4OVERSAMPLERATE PI4SAMPLERATE * OVERSAMPLE
  
 #define PI4CACHESIZE 180                // 180 tone decode samples is approx 30 Seconds
@@ -128,7 +128,7 @@
 #define PI4STARTFREQ 498                                          //first frequency of interest (to nearest 6 Hz)
 #define PI4STARTBIN 83                                            // equivalent bin number from 512 FFT bins 
 #define PI4ENDFREQ 1500                                           //last frequency of interest (to nearest 6 Hz)
-#define PI4TONE0 17                                               // 600 Hz is the 17th bin between STARTFREQ and ENDFREQ
+#define PI4TONE0 31                                               // 683Hz is the 31st bin between STARTFREQ and ENDFREQ
 #define PI4TONESPACING 39                                         //tone spacing in number of bins. 234 / 6 = 39 
 #define PI4TONETOLERANCE 12                                        //Tone tolerance 12 * 6 = +- 72Hz 
 #define PI4NUMBEROFBINS 167                                        //167 bins between STARTFREQ and ENDFREQ

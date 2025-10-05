@@ -46,6 +46,7 @@ uint16_t activeBins;
 int overlap = 1;
 int numberOfTones =1;
 int numberOfBins;
+int startBin;
 
 //Beacon mode variables
 uint16_t toneSpacing;                //tone spacing in number of bins.

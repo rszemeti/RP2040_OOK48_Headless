@@ -9,6 +9,7 @@ void RxInit(void)
   toneTolerance = TONETOLERANCE;
   numberOfTones = 1;
   numberOfBins = OOKNUMBEROFBINS;
+  startBin = OOKSTARTBIN;
 
   calcLegend();
   dma_init();                       //Initialise and start ADC conversions and DMA transfers. 

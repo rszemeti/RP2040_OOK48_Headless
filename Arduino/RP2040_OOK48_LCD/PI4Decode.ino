@@ -1,6 +1,6 @@
 void PI4Init(void)
 {
-  sampleRate = PI4SAMPLERATE;                  //samples per second.
+  sampleRate = PI4OVERSAMPLERATE;                  //samples per second.
   toneSpacing = PI4TONESPACING;                //tone spacing in number of bins.
   tone0 = PI4TONE0;                            //tone zero in bins. 
   toneTolerance = PI4TONETOLERANCE;            //Tone tolerance in bins. 
@@ -11,6 +11,8 @@ void PI4Init(void)
   snBins = PI4SNBINS;
   numberOfTones = 4;
   numberOfBins = PI4NUMBEROFBINS;
+  startBin = PI4STARTBIN;
+
   dma_init();                       //Initialise and start ADC conversions and DMA transfers. 
   dma_handler();                    //call the interrupt handler once to start transfers
   dmaReady = false;                 //reset the transfer ready flag
