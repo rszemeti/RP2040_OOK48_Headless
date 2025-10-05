@@ -65,7 +65,7 @@ void drawApp()
 
       tft.setFreeFont(AppLABEL_FONT);
 
-      Appkey[0].initButton(&tft, 240, 50,300,60, // x, y, w, h, outline, fill, text
+      Appkey[0].initButton(&tft, 240, 60,300,60, // x, y, w, h, outline, fill, text
                         TFT_WHITE, TFT_BLUE, TFT_WHITE,
                         blank, 1);
       Appkey[0].drawButton(0,AppLabel[0]);
@@ -75,7 +75,7 @@ void drawApp()
                         blank, 1);
       Appkey[1].drawButton(0,AppLabel[1]);
 
-      Appkey[2].initButton(&tft, 240, 250,300,60, // x, y, w, h, outline, fill, text
+      Appkey[2].initButton(&tft, 240, 240,300,60, // x, y, w, h, outline, fill, text
                         TFT_WHITE, TFT_BLUE, TFT_WHITE,
                         blank, 1);
       Appkey[2].drawButton(0,AppLabel[2]);
