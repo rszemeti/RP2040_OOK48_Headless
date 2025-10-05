@@ -64,6 +64,7 @@
 #define CFG_TEXTSIZE 1   // Font size multiplier
 #define CFG_NUMBEROFBUTTONS 13     //number of config buttons.
 
+// OOK48 Spectrum display from 495Hz to 1098 Hz     Tone freq = 800 Hz
 //Detection Values
 #define OVERSAMPLE 8                                           //multiple samples are averaged to reduce noise floor. 
 #define NUMBEROFSAMPLES 1024                                       // 1024 samples gives a scan rate of the bitrate
@@ -94,6 +95,7 @@
 
 // Beacon Decoder Defines
 //JT4G Detection Values
+// Spectrum display from 498Hz to 1999 Hz  Tones 800 1115 1430 1745
 
 #define JT4SAMPLERATE 4480              //4480 samples per second * oversample. FFT Bandwidth of 0-2240 Hz at 4.375 Hz
 #define JT4OVERSAMPLERATE JT4SAMPLERATE * OVERSAMPLE
@@ -115,6 +117,7 @@
 
 
 //PI4 Detection Values
+// Spectrum display from 498Hz to 1500 Hz  Tones 683 917 1151 1385
 
 #define PI4SAMPLERATE 6144                             //6144 samples per second * oversample FFT Bandwidth of 0-3072 Hz at 6 Hz
 #define PI4OVERSAMPLERATE PI4SAMPLERATE * OVERSAMPLE
