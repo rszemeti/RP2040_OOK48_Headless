@@ -42,7 +42,7 @@ void beaconTick(void)
       rp2040.fifo.push(DRAWWATERFALL);                          //Ask core 1 to draw the Waterfall Display      
       tn=toneDetect();                                          //Detect which tone is present
 
-        BeaconToneCache[cachePoint] = tn;                     //Add the tone index to the Tone cache 
+        BeaconToneCache[cachePoint++] = tn;                     //Add the tone index to the Tone cache 
 
         if(cachePoint == cacheSize)                               //If the Cache is full (54 seconds of tones)
           {
@@ -273,9 +273,9 @@ void findMax(int tone, double * maxval, double * sn)
   for(int i = 0 ; i < (1+toneTolerance *2) ; i++ )
   {
     int bin = tone0 + tone*toneSpacing - toneTolerance + i;
-    if(sample[bin] > tstval)
+    if(magnitude[bin] > tstval)
      {
-      tstval=sample[bin];
+      tstval=magnitude[bin];
       binnumber = bin;
      }
   }
@@ -284,13 +284,13 @@ void findMax(int tone, double * maxval, double * sn)
    for(int i =0;i < 4;i++ )
    {
     int bin = tone0 + tone * toneSpacing - toneTolerance - 5 + i;  //below the current tone band
-    avg = avg + sample[bin];
+    avg = avg + magnitude[bin];
     bin = tone0 + tone * toneSpacing + toneTolerance + 1 + i;  //above the current tone band 
-    avg = avg + sample[bin];
+    avg = avg + magnitude[bin];
    }
 
   avg = avg /8;
 
-  *maxval = sample[binnumber];
-  *sn = sample[binnumber] / avg;                  //calculate and return the S/N ratio for the max tone.
+  *maxval = magnitude[binnumber];
+  *sn = magnitude[binnumber] / avg;                  //calculate and return the S/N ratio for the max tone.
 }
