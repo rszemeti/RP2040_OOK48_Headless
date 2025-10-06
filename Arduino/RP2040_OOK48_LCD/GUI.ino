@@ -94,6 +94,11 @@ void textClear(void)
 
 void textPrintLine(const char* message)
 {
+  if((sdpresent) & (sdfile))
+   {
+    sdfile.println(message);
+   }
+
  if(textrow > (TEXTTOP + TEXTHEIGHT - tft.fontHeight()))
     {
       textClear();
