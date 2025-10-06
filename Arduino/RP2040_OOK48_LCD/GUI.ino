@@ -171,15 +171,6 @@ void showTime(void)
   tft.setTextDatum(TL_DATUM);  
 }
 
-
-void textLine(void)
-{
-  if(textrow > 3)
-  {
-    tft.drawFastHLine(TEXTLEFT,textrow-3,TEXTWIDTH,TFT_BLUE);
-  }
-}
-
 // Create 6 Buttons
 char BUTLabel[6][10] = {"Clear","Config","","","Set Tx","Tx"};
 

@@ -234,12 +234,10 @@ void loop1()
         case JTMESSAGE:
         sprintf(m,"%02d:%02d %.0lf :%s",gpsHr,gpsMin, sigNoise,JTmessage);
         textPrintLine(m);                                 
-        textLine(); 
         break;
         case PIMESSAGE:
         sprintf(m,"%02d:%02d %.0lf :%s",gpsHr,gpsMin, sigNoise,PImessage);
-        textPrintLine(m);                                 
-        textLine(); 
+        textPrintLine(m);                                  
         break;
         case ERROR:
         textPrintChar(decoded,TFT_ORANGE);                                           
