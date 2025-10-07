@@ -88,7 +88,8 @@ void drawSpectrum(void)
 void textClear(void)
 {
   tft.fillRect(TEXTLEFT, TEXTTOP, TEXTWIDTH, TEXTHEIGHT, TFT_WHITE);
-  textrow = tft.fontHeight();
+  tft.setTextSize(1);
+  textrow = 0;
   textcol = 0;
 }
 
@@ -105,6 +106,7 @@ void textPrintLine(const char* message)
     }
   tft.setTextColor(TFT_BLUE);
   tft.setFreeFont(&FreeSans9pt7b);
+  tft.setTextSize(1);
   tft.setTextDatum(TL_DATUM);
   tft.drawString(message,TEXTLEFT,TEXTTOP+textrow);
   textrow=textrow + tft.fontHeight();

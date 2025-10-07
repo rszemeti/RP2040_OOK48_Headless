@@ -61,22 +61,35 @@ int getApp(void)
 void drawApp()
 {
   char blank[2] = " ";
-  // Draw the two buttons
+  uint16_t backcolour[3];
+  // Draw the three buttons
+     for(int i = 0;i<3;i++)
+     {
+      if(settings.app == i)
+       {
+        backcolour[i] = TFT_DARKGREEN;
+       }
+      else
+       {
+        backcolour[i] = TFT_BLUE;
+       }
+     }
+
 
       tft.setFreeFont(AppLABEL_FONT);
 
       Appkey[0].initButton(&tft, 240, 60,300,60, // x, y, w, h, outline, fill, text
-                        TFT_WHITE, TFT_BLUE, TFT_WHITE,
+                        TFT_WHITE, backcolour[0], TFT_WHITE,
                         blank, 1);
       Appkey[0].drawButton(0,AppLabel[0]);
 
       Appkey[1].initButton(&tft, 240, 150,300,60, // x, y, w, h, outline, fill, text
-                        TFT_WHITE, TFT_BLUE, TFT_WHITE,
+                        TFT_WHITE, backcolour[1], TFT_WHITE,
                         blank, 1);
       Appkey[1].drawButton(0,AppLabel[1]);
 
       Appkey[2].initButton(&tft, 240, 240,300,60, // x, y, w, h, outline, fill, text
-                        TFT_WHITE, TFT_BLUE, TFT_WHITE,
+                        TFT_WHITE, backcolour[2], TFT_WHITE,
                         blank, 1);
       Appkey[2].drawButton(0,AppLabel[2]);
 }

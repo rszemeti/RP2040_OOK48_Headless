@@ -164,6 +164,20 @@ void setup1()
   waterRow = 0;
   initGUI();
   homeScreen();
+  textClear();
+  switch(settings.app)
+   {
+    case 0:
+    textPrintLine("OOK48 Selected");
+    break;
+    case 1:
+    textPrintLine("JT4G Selected");
+    break;
+    case 2:
+    textPrintLine("PI4 Selected");
+    break;    
+   }
+   textPrintLine("");
 }
 
 
