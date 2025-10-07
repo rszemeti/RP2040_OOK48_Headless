@@ -1,5 +1,6 @@
 
 // OOK48 Encoder and Decoder LCD version
+// Plus Beacon Decoder
 // Colin Durbridge G4EML 2025
 
 
@@ -42,11 +43,27 @@ void setup()
     digitalWrite(KEYPIN,0);
     pinMode(TXPIN,OUTPUT);
     digitalWrite(TXPIN,0);
-    mode = RX;  
-    RxInit();
-    TxMessNo = 0;
-    TxInit();
-    attachInterrupt(PPSINPUT,ppsISR,RISING);
+    if(settings.app == OOK48)
+     {
+       mode = RX;  
+       RxInit();
+       TxMessNo = 0;
+       TxInit();
+     }
+     else           //Beacon Decoder
+     {
+      if(settings.app == BEACONPI4)
+      {
+       beaconMode = PI4;
+       PI4Init();
+      }
+      else 
+      {
+       beaconMode = JT4;
+       JT4Init();
+      }
+     }
+      attachInterrupt(PPSINPUT,ppsISR,RISING);
 }
 
 //Interrupt called every symbol time to update the Key output. 
@@ -96,7 +113,9 @@ void ppsISR(void)
 void doPPS(void)
 {
   PPSActive = 3;              //reset 3 second timeout for PPS signal
-  if(mode == RX)
+  if(settings.app == OOK48)            //don't need to do anything with the PPS when running beacon decoder. 
+  {
+   if(mode == RX)
     {
       dma_stop();
       dma_handler();        //call dma handler to reset the DMA timing and restart the transfers
@@ -110,13 +129,13 @@ void doPPS(void)
         cachePoint = 8;        //Reset ready for the first symbol of the second character
       } 
     } 
-  else 
+   else 
     {
       cancel_repeating_timer(&TxIntervalTimer);                           //Stop the symbol timer if it is running. 
       add_repeating_timer_us(-TXINTERVAL,TxIntervalInterrupt,NULL,&TxIntervalTimer);    // re-start the Symbol timer
       TxSymbol();                       //send the first symbol
     }
- 
+  }
 }
 
 //core 1 handles the GUI
@@ -124,7 +143,7 @@ void setup1()
 {
   Serial2.setRX(GPSRXPin);              //Configure the GPIO pins for the GPS module
   Serial2.setTX(GPSTXPin);
-  while(settings.baudMagic != 42)                   //wait for core zero to initialise the baud rate for GPS. 
+  while((settings.baudMagic != 42) || (settings.app == 255))                   //wait for core zero to initialise 
    {
     delay(1);
    }
@@ -143,21 +162,44 @@ void setup1()
 
   gpsPointer = 0;
   waterRow = 0;
-  initGUI();                        //initialise the GUI screen
+  initGUI();
+  homeScreen();
+  textClear();
+  switch(settings.app)
+   {
+    case 0:
+    textPrintLine("OOK48 Selected");
+    break;
+    case 1:
+    textPrintLine("JT4G Selected");
+    break;
+    case 2:
+    textPrintLine("PI4 Selected");
+    break;    
+   }
+   textPrintLine("");
 }
 
 
 //Main Loop Core 0. Runs forever. Does most of the work.
 void loop() 
 {
-  if(mode == RX)
+  if(settings.app == OOK48)
    {
-    RxTick();
+     if(mode == RX)
+      {
+        RxTick();
+      }
+     else 
+      {
+        TxTick();
+      }
    }
-   else 
-    {
-     TxTick();
-    }
+   else           //Beacon Decoder
+   {
+     beaconTick();
+   }
+
 }
 
 
@@ -201,6 +243,14 @@ void loop1()
         break;
         case TMESSAGE:
         textPrintChar(TxCharSent,TFT_RED);                               
+        break;
+        case JTMESSAGE:
+        sprintf(m,"%02d:%02d %.0lf :%s",gpsHr,gpsMin, sigNoise,JTmessage);
+        textPrintLine(m);                                 
+        break;
+        case PIMESSAGE:
+        sprintf(m,"%02d:%02d %.0lf :%s",gpsHr,gpsMin, sigNoise,PImessage);
+        textPrintLine(m);                                  
         break;
         case ERROR:
         textPrintChar(decoded,TFT_ORANGE);                                           
@@ -414,6 +464,12 @@ void loadSettings(void)
   if((settings.batcal < 300) | (settings.batcal > 1000))
    {
     settings.batcal = BATCAL;
+   }
+
+  if(settings.app >3) 
+   {
+    settings.app = 0;
+    ss = true;
    }
 
    if(ss) saveSettings();

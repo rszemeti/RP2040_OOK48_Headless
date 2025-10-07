@@ -71,12 +71,18 @@ bool cfgLoop = false;
       settings.locatorLength = 10;
       break;    
     case 3:
-      halfRate = false;
-      cacheSize = CACHESIZE;
+      if(settings.app == OOK48)
+       {
+        halfRate = false;
+        cacheSize = CACHESIZE;
+       }
       break;
     case 4:
-      halfRate = true;
-      cacheSize = CACHESIZE *2;
+      if(settings.app == OOK48)
+       {
+        halfRate = true;
+        cacheSize = CACHESIZE *2;
+       }
       break;
     case 5:
       settings.gpsBaud = 9600;
@@ -92,27 +98,39 @@ bool cfgLoop = false;
       break;
 
     case 7:
-      settings.decodeMode = NORMALMODE;
+      if(settings.app == OOK48)
+       {
+        settings.decodeMode = NORMALMODE;
+       }
       break;
     
     case 8:
-      settings.decodeMode = ALTMODE;
+      if(settings.app == OOK48)
+       {
+        settings.decodeMode = ALTMODE;
+       }
       break;
     case 9:
-      txt[0] = 32;
-      txt[1] = 0;
-      getText("Enter Tx Timing Advance in ms", txt,10);
-      settings.txAdvance = atoi(txt);
-      if(settings.txAdvance <0) settings.txAdvance = 0;
-      if(settings.txAdvance >999) settings.txAdvance = 999;
+      if(settings.app == OOK48)
+       {
+        txt[0] = 32;
+        txt[1] = 0;
+        getText("Enter Tx Timing Advance in ms", txt,10);
+        settings.txAdvance = atoi(txt);
+        if(settings.txAdvance <0) settings.txAdvance = 0;
+        if(settings.txAdvance >999) settings.txAdvance = 999;
+       }
       break;
     case 10:
-      txt[0] = 32;
-      txt[1] = 0;
-      getText("Enter Rx Timing Retard in ms", txt,10);
-      settings.rxRetard = atoi(txt);
-      if(settings.rxRetard < 0) settings.rxRetard = 0;
-      if(settings.rxRetard > 999) settings.rxRetard = 999;
+      if(settings.app == OOK48)
+       {
+        txt[0] = 32;
+        txt[1] = 0;
+        getText("Enter Rx Timing Retard in ms", txt,10);
+        settings.rxRetard = atoi(txt);
+        if(settings.rxRetard < 0) settings.rxRetard = 0;
+        if(settings.rxRetard > 999) settings.rxRetard = 999;
+       }
       break;
     case 11:
       if(sdpresent)
@@ -153,15 +171,15 @@ uint16_t cfgTextcolour;
   ypos=CFG_LINESPACING*0.5;
   tft.drawString("Set Locator length", CFG_TEXTLEFT, ypos);
   ypos=ypos + CFG_LINESPACING*2;
-  tft.drawString("Character Period ", CFG_TEXTLEFT, ypos);
+  if(settings.app == OOK48) tft.drawString("Character Period ", CFG_TEXTLEFT, ypos);
   ypos=ypos + CFG_LINESPACING*2;
   tft.drawString("GPS Baud Rate", CFG_TEXTLEFT, ypos);
   ypos=ypos + CFG_LINESPACING*2;
-  tft.drawString("Decode Mode", CFG_TEXTLEFT, ypos);
+  if(settings.app == OOK48) tft.drawString("Decode Mode", CFG_TEXTLEFT, ypos);
   ypos=ypos + CFG_LINESPACING*2;
-  tft.drawString("Tx Timing Advance                  ms", CFG_TEXTLEFT, ypos);
+  if(settings.app == OOK48) tft.drawString("Tx Timing Advance                  ms", CFG_TEXTLEFT, ypos);
   ypos=ypos + CFG_LINESPACING*2;
-  tft.drawString("Rx Timing Retard                     ms", CFG_TEXTLEFT, ypos);
+  if(settings.app == OOK48) tft.drawString("Rx Timing Retard                     ms", CFG_TEXTLEFT, ypos);
   if(sdpresent)
     {
       ypos=ypos + CFG_LINESPACING*2;
@@ -192,6 +210,8 @@ uint16_t cfgTextcolour;
       cfgKbd[2].drawButton(); 
   ypos=ypos + CFG_LINESPACING*2;
 // Character Period Buttons
+  if(settings.app == OOK48)
+   {
       if (!halfRate) cfgTextcolour = TFT_GREEN; else cfgTextcolour = TFT_WHITE;
       cfgKbd[3].initButton(&tft, CFG_BUTTONSLEFT + CFG_W/2,
                         ypos + CFG_LINESPACING/2, // x, y, w, h, outline, fill, text
@@ -203,7 +223,8 @@ uint16_t cfgTextcolour;
                         ypos + CFG_LINESPACING/2, // x, y, w, h, outline, fill, text
                         CFG_W, CFG_H, TFT_WHITE, TFT_BLUE, cfgTextcolour,
                         congfglabels[4], CFG_TEXTSIZE);
-      cfgKbd[4].drawButton(); 
+      cfgKbd[4].drawButton();
+   } 
   ypos=ypos + CFG_LINESPACING*2;
 // GPS Baud Rate Buttons
       if (settings.gpsBaud == 9600) cfgTextcolour = TFT_GREEN; else cfgTextcolour = TFT_WHITE;
@@ -220,6 +241,8 @@ uint16_t cfgTextcolour;
       cfgKbd[6].drawButton(); 
   ypos=ypos + CFG_LINESPACING*2;
 // Decode Mode Buttons
+ if(settings.app == OOK48)
+   {
       if (settings.decodeMode == NORMALMODE) cfgTextcolour = TFT_GREEN; else cfgTextcolour = TFT_WHITE;
       cfgKbd[7].initButton(&tft, CFG_BUTTONSLEFT + CFG_W/2,
                         ypos + CFG_LINESPACING/2, // x, y, w, h, outline, fill, text
@@ -232,9 +255,11 @@ uint16_t cfgTextcolour;
                         CFG_W, CFG_H, TFT_WHITE, TFT_BLUE, cfgTextcolour,
                         congfglabels[8], CFG_TEXTSIZE);
       cfgKbd[8].drawButton();
-
+   }
+    ypos=ypos + CFG_LINESPACING*2;
 // Tx Advance Button
-      ypos=ypos + CFG_LINESPACING*2;
+if(settings.app == OOK48)
+  {
       cfgTextcolour = TFT_WHITE;
       cfgKbd[9].initButton(&tft, CFG_BUTTONSLEFT + CFG_W/2,
                         ypos + CFG_LINESPACING/2, // x, y, w, h, outline, fill, text
@@ -242,9 +267,11 @@ uint16_t cfgTextcolour;
                         congfglabels[9], CFG_TEXTSIZE);
       sprintf(txt,"%d",settings.txAdvance);
       cfgKbd[9].drawButton(false,txt); 
-
+  }
+    ypos=ypos + CFG_LINESPACING*2;
 // Rx Retard Buttons
-      ypos=ypos + CFG_LINESPACING*2;
+if(settings.app == OOK48)
+  {
       cfgTextcolour = TFT_WHITE;
       cfgKbd[10].initButton(&tft, CFG_BUTTONSLEFT + CFG_W/2,
                         ypos + CFG_LINESPACING/2, // x, y, w, h, outline, fill, text
@@ -252,7 +279,7 @@ uint16_t cfgTextcolour;
                         congfglabels[10], CFG_TEXTSIZE);
       sprintf(txt,"%d",settings.rxRetard);      
       cfgKbd[10].drawButton(false,txt);
-
+  }
 // USB Drive Button
       if(sdpresent)
        {

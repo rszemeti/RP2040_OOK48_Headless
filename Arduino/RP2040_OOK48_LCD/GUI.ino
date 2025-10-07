@@ -19,7 +19,6 @@ void initGUI(void)
    {
     touch_calibrate(0);
    }
-  homeScreen();
 }
 
 void homeScreen(void)
@@ -55,13 +54,9 @@ void drawWaterfall(void)
   if(mode == RX)
   {
     if(waterRow < WATERHEIGHT-1) tft.drawFastHLine(WATERLEFT,WATERTOP + waterRow + 1,WATERWIDTH,TFT_WHITE);       //Draw White line acrost the Waterfall to highlight the current position.
-    for(int p=0 ; p < NUMBEROFBINS ; p++)                                              //for each of the data points in the current row
+    for(int p=0 ; p < WATERWIDTH ; p++)                                              //for each of the data points in the current row
     {
-      for(int pc=0;pc<PIXELSPERBIN;pc++)
-      {
-        tft.drawPixel(WATERLEFT + p*PIXELSPERBIN + pc, WATERTOP + waterRow, waterColours[(plotData[p] + 10) *2]);             //draw a pixel of the required colour
-      }
-
+        tft.drawPixel(WATERLEFT + p, WATERTOP + waterRow, waterColours[(plotData[p] + 10) *2]);             //draw a pixel of the required colour
     } 
     waterRow++;                                                                      //Increment the row for next time
     if(waterRow >= WATERHEIGHT) waterRow = 0;                                        //Cycle back to the start at the end of the display. (would be nice to scroll the display but this is too slow)
@@ -81,30 +76,37 @@ void drawSpectrum(void)
 {
   if(mode == RX)
   {
-    for(int p=1 ; p < NUMBEROFBINS ; p++)                                             //for each of the data points in the current row
+    for(int p=1 ; p < SPECWIDTH ; p++)                                             //for each of the data points in the current row
       {
-        tft.drawLine(SPECLEFT + p*PIXELSPERBIN - 1, SPECTOP + SPECHEIGHT - lastplotData[p-1], SPECLEFT + p*PIXELSPERBIN +PIXELSPERBIN, SPECTOP + SPECHEIGHT - lastplotData[p], TFT_CYAN);   //erase previous plot
-        tft.drawLine(SPECLEFT + p*PIXELSPERBIN - 1, SPECTOP + SPECHEIGHT - plotData[p-1], SPECLEFT + p*PIXELSPERBIN +PIXELSPERBIN, SPECTOP + SPECHEIGHT - plotData[p], TFT_RED);            //draw new plot
+        tft.drawLine(SPECLEFT + p - 1, SPECTOP + SPECHEIGHT - lastplotData[p-1], SPECLEFT + p, SPECTOP + SPECHEIGHT - lastplotData[p], TFT_CYAN);   //erase previous plot
+        tft.drawLine(SPECLEFT + p - 1, SPECTOP + SPECHEIGHT - plotData[p-1], SPECLEFT + p, SPECTOP + SPECHEIGHT - plotData[p], TFT_RED);            //draw new plot
       }
-    memcpy(lastplotData , plotData, NUMBEROFBINS);       //need to save this plot so that we can erase it next time (faster than clearing the screen)
+    memcpy(lastplotData , plotData, SPECWIDTH);       //need to save this plot so that we can erase it next time (faster than clearing the screen)
   }  
 }
 
 void textClear(void)
 {
   tft.fillRect(TEXTLEFT, TEXTTOP, TEXTWIDTH, TEXTHEIGHT, TFT_WHITE);
-  textrow = tft.fontHeight();
+  tft.setTextSize(1);
+  textrow = 0;
   textcol = 0;
 }
 
 void textPrintLine(const char* message)
 {
+  if((sdpresent) & (sdfile))
+   {
+    sdfile.println(message);
+   }
+
  if(textrow > (TEXTTOP + TEXTHEIGHT - tft.fontHeight()))
     {
       textClear();
     }
   tft.setTextColor(TFT_BLUE);
   tft.setFreeFont(&FreeSans9pt7b);
+  tft.setTextSize(1);
   tft.setTextDatum(TL_DATUM);
   tft.drawString(message,TEXTLEFT,TEXTTOP+textrow);
   textrow=textrow + tft.fontHeight();
@@ -176,17 +178,8 @@ void showTime(void)
   tft.setTextDatum(TL_DATUM);  
 }
 
-
-void textLine(void)
-{
-  if(textrow > 3)
-  {
-    tft.drawFastHLine(TEXTLEFT,textrow-3,TEXTWIDTH,TFT_BLUE);
-  }
-}
-
 // Create 6 Buttons
-char BUTLabel[6][10] = {"Clear","Config","","","Set Tx","Tx"};
+char BUTLabel[6][10] = {"Clear","Config","","App","Set Tx","Tx"};
 
 // Invoke the TFT_eSPI button class and create all the  objects
 TFT_eSPI_Button BUTkey[6];
@@ -195,12 +188,18 @@ void drawButtons(void)
 {
   tft.fillRect(BUTSLEFT,BUTSTOP,BUTSWIDTH,BUTSHEIGHT,TFT_BLACK);
 
+  if(settings.app >= BEACONJT4)               //remove the Tx Buttons when in Beacon Decoder mode
+   {
+     strcpy(BUTLabel[4],"");
+     strcpy(BUTLabel[5],"");     
+   }
+
 // Draw the keys
+
   int tsz;
   for (uint8_t i= 0; i< 6; i++) 
   {
       char blank[2] = " ";
-
       tft.setFreeFont(BUTLABEL_FONT);
 
       if(i == 5)
@@ -358,56 +357,65 @@ void processTouch(void)
       break;
 
       case 3:
+      settings.app = getApp();
+      saveSettings();
+      rp2040.reboot();                    //force a reboot on app selection. 
       noTouch = false;
       break;
 
       case 4:
-      noTouch = false;
-      messageChanging = true;
-      TxMessNo = doMemPad();
-      getText("Enter TX Message", settings.TxMessage[TxMessNo], 30);
-      saveSettings();
-      homeScreen();
-      if(mode == TX)
-       {
-         mode = RX;
-         digitalWrite(KEYPIN, 0);
-         cancel_repeating_timer(&TxIntervalTimer);
-         mode = TX;
-         TxInit();
-         BUTkey[5].drawButton(0,"Rx");
-         displayTx();        
-       }
-       messageChanging = false;
+      if(settings.app == OOK48)
+      {
+        noTouch = false;
+        messageChanging = true;
+        TxMessNo = doMemPad();
+        getText("Enter TX Message", settings.TxMessage[TxMessNo], 30);
+        saveSettings();
+        homeScreen();
+        if(mode == TX)
+         {
+           mode = RX;
+           digitalWrite(KEYPIN, 0);
+           cancel_repeating_timer(&TxIntervalTimer);
+           mode = TX;
+           TxInit();
+           BUTkey[5].drawButton(0,"Rx");
+           displayTx();        
+         }
+        messageChanging = false;
+      }
       break;
 
       case 5:
-      noTouch = false;
-      if(mode == RX)
-       {
-         mode = TX;
-         TxInit();
-         digitalWrite(TXPIN, 1);
-         BUTkey[5].drawButton(0,"Rx");
-         displayTx();
+      if(settings.app == OOK48)
+        {
+        noTouch = false;
+        if(mode == RX)
+         {
+           mode = TX;
+           TxInit();
+           digitalWrite(TXPIN, 1);
+           BUTkey[5].drawButton(0,"Rx");
+           displayTx();
 
-         TxPointer = 0;
-         TxBitPointer = 0;
-       }
-       else 
-       {
-         mode = RX;
-         digitalWrite(KEYPIN, 0);
-         digitalWrite(TXPIN, 0);
-         cancel_repeating_timer(&TxIntervalTimer);
-         tft.setFreeFont(BUTLABEL_FONT);
-         BUTkey[5].drawButton(0,"Tx");
-         BUTkey[4].drawButton(0,"Set Tx");
-         clearSpectrum();
-         drawLegend();
-         waterRow = 0;
-         textPrintChar(13,TFT_BLUE);
-       }
+           TxPointer = 0;
+           TxBitPointer = 0;
+         }
+         else 
+         {
+           mode = RX;
+           digitalWrite(KEYPIN, 0);
+           digitalWrite(TXPIN, 0);
+           cancel_repeating_timer(&TxIntervalTimer);
+           tft.setFreeFont(BUTLABEL_FONT);
+           BUTkey[5].drawButton(0,"Tx");
+           BUTkey[4].drawButton(0,"Set Tx");
+           clearSpectrum();
+           drawLegend();
+           waterRow = 0;
+           textPrintChar(13,TFT_BLUE);
+         }
+        }
       break;
     }
  }
@@ -427,7 +435,7 @@ void processTouch(void)
       return;
     }
 
-   if(touchZone(WATERLEFT, WATERTOP, WATERWIDTH, WATERHEIGHT)&& noTouch)
+   if(touchZone(WATERLEFT, WATERTOP, WATERWIDTH, WATERHEIGHT)&& noTouch && settings.app == OOK48)
     {
       noTouch = false;
       switch(toneTolerance)
@@ -460,13 +468,30 @@ void processTouch(void)
 void drawLegend(void)
 {
   tft.fillRect(LEGLEFT,LEGTOP,LEGWIDTH,LEGHEIGHT, TFT_WHITE);
-  tft.fillRect(toneLegend[0]*PIXELSPERBIN, LEGTOP, 1 + toneLegend[1]*PIXELSPERBIN , LEGHEIGHT , TFT_ORANGE);
+  for(int l = 0 ; l < numberOfTones;l++)
+  {
+  tft.fillRect(toneLegend[l][0], LEGTOP, 1 + toneLegend[l][1] , LEGHEIGHT , TFT_ORANGE);
+  }
+
 }
 
 void calcLegend(void)
 {
-    toneLegend[0] = TONE800 - toneTolerance;
-    toneLegend[1] = toneTolerance *2;
+   if(settings.app == OOK48)
+   {
+    toneLegend[0][0] = (rxTone - toneTolerance)*  SPECWIDTH /numberOfBins ;
+    toneLegend[0][1] = (toneTolerance *2) * SPECWIDTH/ numberOfBins ;   
+   }
+   else
+   {
+    for(int t =0;t < numberOfTones;t++)
+     {
+      toneLegend[t][0] = (tone0 + (toneSpacing * t) - toneTolerance) *  SPECWIDTH /numberOfBins;
+      toneLegend[t][1] = (toneTolerance *2) *  SPECWIDTH /numberOfBins; 
+     }
+  
+   }
+
 }
 
 void stopButton(void)
