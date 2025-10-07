@@ -177,7 +177,7 @@ void showTime(void)
 }
 
 // Create 6 Buttons
-char BUTLabel[6][10] = {"Clear","Config","","","Set Tx","Tx"};
+char BUTLabel[6][10] = {"Clear","Config","","App","Set Tx","Tx"};
 
 // Invoke the TFT_eSPI button class and create all the  objects
 TFT_eSPI_Button BUTkey[6];
@@ -186,7 +186,7 @@ void drawButtons(void)
 {
   tft.fillRect(BUTSLEFT,BUTSTOP,BUTSWIDTH,BUTSHEIGHT,TFT_BLACK);
 
-  if(app >= BEACONJT4)               //remove the Tx Buttons when in Beacon Decoder mode
+  if(settings.app >= BEACONJT4)               //remove the Tx Buttons when in Beacon Decoder mode
    {
      strcpy(BUTLabel[4],"");
      strcpy(BUTLabel[5],"");     
@@ -355,11 +355,14 @@ void processTouch(void)
       break;
 
       case 3:
+      settings.app = getApp();
+      saveSettings();
+      rp2040.reboot();                    //force a reboot on app selection. 
       noTouch = false;
       break;
 
       case 4:
-      if(app == OOK48)
+      if(settings.app == OOK48)
       {
         noTouch = false;
         messageChanging = true;
@@ -382,7 +385,7 @@ void processTouch(void)
       break;
 
       case 5:
-      if(app == OOK48)
+      if(settings.app == OOK48)
         {
         noTouch = false;
         if(mode == RX)
@@ -430,7 +433,7 @@ void processTouch(void)
       return;
     }
 
-   if(touchZone(WATERLEFT, WATERTOP, WATERWIDTH, WATERHEIGHT)&& noTouch && app == OOK48)
+   if(touchZone(WATERLEFT, WATERTOP, WATERWIDTH, WATERHEIGHT)&& noTouch && settings.app == OOK48)
     {
       noTouch = false;
       switch(toneTolerance)
@@ -472,7 +475,7 @@ void drawLegend(void)
 
 void calcLegend(void)
 {
-   if(app == OOK48)
+   if(settings.app == OOK48)
    {
     toneLegend[0][0] = (rxTone - toneTolerance)*  SPECWIDTH /numberOfBins ;
     toneLegend[0][1] = (toneTolerance *2) * SPECWIDTH/ numberOfBins ;   

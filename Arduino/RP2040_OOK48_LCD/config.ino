@@ -71,14 +71,14 @@ bool cfgLoop = false;
       settings.locatorLength = 10;
       break;    
     case 3:
-      if(app == OOK48)
+      if(settings.app == OOK48)
        {
         halfRate = false;
         cacheSize = CACHESIZE;
        }
       break;
     case 4:
-      if(app == OOK48)
+      if(settings.app == OOK48)
        {
         halfRate = true;
         cacheSize = CACHESIZE *2;
@@ -98,20 +98,20 @@ bool cfgLoop = false;
       break;
 
     case 7:
-      if(app == OOK48)
+      if(settings.app == OOK48)
        {
         settings.decodeMode = NORMALMODE;
        }
       break;
     
     case 8:
-      if(app == OOK48)
+      if(settings.app == OOK48)
        {
         settings.decodeMode = ALTMODE;
        }
       break;
     case 9:
-      if(app == OOK48)
+      if(settings.app == OOK48)
        {
         txt[0] = 32;
         txt[1] = 0;
@@ -122,7 +122,7 @@ bool cfgLoop = false;
        }
       break;
     case 10:
-      if(app == OOK48)
+      if(settings.app == OOK48)
        {
         txt[0] = 32;
         txt[1] = 0;
@@ -171,15 +171,15 @@ uint16_t cfgTextcolour;
   ypos=CFG_LINESPACING*0.5;
   tft.drawString("Set Locator length", CFG_TEXTLEFT, ypos);
   ypos=ypos + CFG_LINESPACING*2;
-  if(app == OOK48) tft.drawString("Character Period ", CFG_TEXTLEFT, ypos);
+  if(settings.app == OOK48) tft.drawString("Character Period ", CFG_TEXTLEFT, ypos);
   ypos=ypos + CFG_LINESPACING*2;
   tft.drawString("GPS Baud Rate", CFG_TEXTLEFT, ypos);
   ypos=ypos + CFG_LINESPACING*2;
-  if(app == OOK48) tft.drawString("Decode Mode", CFG_TEXTLEFT, ypos);
+  if(settings.app == OOK48) tft.drawString("Decode Mode", CFG_TEXTLEFT, ypos);
   ypos=ypos + CFG_LINESPACING*2;
-  if(app == OOK48) tft.drawString("Tx Timing Advance                  ms", CFG_TEXTLEFT, ypos);
+  if(settings.app == OOK48) tft.drawString("Tx Timing Advance                  ms", CFG_TEXTLEFT, ypos);
   ypos=ypos + CFG_LINESPACING*2;
-  if(app == OOK48) tft.drawString("Rx Timing Retard                     ms", CFG_TEXTLEFT, ypos);
+  if(settings.app == OOK48) tft.drawString("Rx Timing Retard                     ms", CFG_TEXTLEFT, ypos);
   if(sdpresent)
     {
       ypos=ypos + CFG_LINESPACING*2;
@@ -210,7 +210,7 @@ uint16_t cfgTextcolour;
       cfgKbd[2].drawButton(); 
   ypos=ypos + CFG_LINESPACING*2;
 // Character Period Buttons
-  if(app == OOK48)
+  if(settings.app == OOK48)
    {
       if (!halfRate) cfgTextcolour = TFT_GREEN; else cfgTextcolour = TFT_WHITE;
       cfgKbd[3].initButton(&tft, CFG_BUTTONSLEFT + CFG_W/2,
@@ -241,7 +241,7 @@ uint16_t cfgTextcolour;
       cfgKbd[6].drawButton(); 
   ypos=ypos + CFG_LINESPACING*2;
 // Decode Mode Buttons
- if(app == OOK48)
+ if(settings.app == OOK48)
    {
       if (settings.decodeMode == NORMALMODE) cfgTextcolour = TFT_GREEN; else cfgTextcolour = TFT_WHITE;
       cfgKbd[7].initButton(&tft, CFG_BUTTONSLEFT + CFG_W/2,
@@ -258,7 +258,7 @@ uint16_t cfgTextcolour;
    }
     ypos=ypos + CFG_LINESPACING*2;
 // Tx Advance Button
-if(app == OOK48)
+if(settings.app == OOK48)
   {
       cfgTextcolour = TFT_WHITE;
       cfgKbd[9].initButton(&tft, CFG_BUTTONSLEFT + CFG_W/2,
@@ -270,7 +270,7 @@ if(app == OOK48)
   }
     ypos=ypos + CFG_LINESPACING*2;
 // Rx Retard Buttons
-if(app == OOK48)
+if(settings.app == OOK48)
   {
       cfgTextcolour = TFT_WHITE;
       cfgKbd[10].initButton(&tft, CFG_BUTTONSLEFT + CFG_W/2,

@@ -43,9 +43,7 @@ void setup()
     digitalWrite(KEYPIN,0);
     pinMode(TXPIN,OUTPUT);
     digitalWrite(TXPIN,0);
-    initGUI();
-    app = getApp(); 
-    if(app == OOK48)
+    if(settings.app == OOK48)
      {
        mode = RX;  
        RxInit();
@@ -54,7 +52,7 @@ void setup()
      }
      else           //Beacon Decoder
      {
-      if(app == BEACONPI4)
+      if(settings.app == BEACONPI4)
       {
        beaconMode = PI4;
        PI4Init();
@@ -115,7 +113,7 @@ void ppsISR(void)
 void doPPS(void)
 {
   PPSActive = 3;              //reset 3 second timeout for PPS signal
-  if(app == OOK48)            //don't need to do anything with the PPS when running beacon decoder. 
+  if(settings.app == OOK48)            //don't need to do anything with the PPS when running beacon decoder. 
   {
    if(mode == RX)
     {
@@ -145,7 +143,7 @@ void setup1()
 {
   Serial2.setRX(GPSRXPin);              //Configure the GPIO pins for the GPS module
   Serial2.setTX(GPSTXPin);
-  while((settings.baudMagic != 42) || (app == 255))                   //wait for core zero to initialise 
+  while((settings.baudMagic != 42) || (settings.app == 255))                   //wait for core zero to initialise 
    {
     delay(1);
    }
@@ -164,6 +162,7 @@ void setup1()
 
   gpsPointer = 0;
   waterRow = 0;
+  initGUI();
   homeScreen();
 }
 
@@ -171,7 +170,7 @@ void setup1()
 //Main Loop Core 0. Runs forever. Does most of the work.
 void loop() 
 {
-  if(app == OOK48)
+  if(settings.app == OOK48)
    {
      if(mode == RX)
       {
@@ -451,6 +450,12 @@ void loadSettings(void)
   if((settings.batcal < 300) | (settings.batcal > 1000))
    {
     settings.batcal = BATCAL;
+   }
+
+  if(settings.app >3) 
+   {
+    settings.app = 0;
+    ss = true;
    }
 
    if(ss) saveSettings();

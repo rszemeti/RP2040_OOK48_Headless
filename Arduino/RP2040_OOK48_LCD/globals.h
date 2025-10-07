@@ -15,6 +15,7 @@ struct eepromstruct
   uint16_t txAdvance;             //Tx timing advance in ms
   uint16_t rxRetard;              //Rx Timing retard in ms
   float batcal;                   //battery voltage calibration factor
+  uint8_t app;                    //currently selected application OOK48 JT4G or PI4
 };
 
 struct eepromstruct settings;
@@ -28,7 +29,6 @@ uint dma_chan;                        //DMA Channel Number
 bool dmaReady;                        //Flag to indicate a DMA buffer is ready to be processed.
 uint8_t bufIndex = 0;                 //Index to the current DMA buffer. Alternates 0/1.
 
-uint8_t app = 255;
 enum apps {OOK48,BEACONJT4,BEACONPI4};
 
 uint8_t mode;
