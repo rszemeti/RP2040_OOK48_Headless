@@ -30,22 +30,26 @@ It is described in the document https://github.com/g4eml/RP2040_OOK48_LCD/blob/m
 
 - Recording of messages to SD card for later viewing on a PC.
 
-- USB Drive mode to allow downloading of SD card files to a PC. 
+- USB Drive mode to allow downloading of SD card files to a PC.
+
+- Also now includes decode only mode for JT4G and PI4 beacon signals. 
 
 ## Operation Description
 
 ### Display
 The display is split into 4 main areas. On the left are the Spectrum display and Waterfall. These are used to tune the reciever to the correct frequency. 
 
-The Spectrum and Waterfall span from 500 Hz to 1100 Hz. Underneath the spectrum display there is an orange band which indicates the correct frequency range for decoding (centred on 800 Hz) . The receiver needs to be tuned such that the received tone falls withing this orange band. 
+in OOK48 mode the Spectrum and Waterfall span from 500 Hz to 1100 Hz. Underneath the spectrum display there is an orange band which indicates the correct frequency range for decoding (centred on 800 Hz) . The receiver needs to be tuned such that the received tone falls withing this orange band. 
 
 Received messages will appear at one character per second on the right hand side of the display. 
 
-When Transmitting the Spectrum display is replaced with a RED box and the Text 'TX'. The transmitted message appears on the right hand side in red as it is sent. 
+When Transmitting the Spectrum display is replaced with a RED box and the Text 'TX'. The transmitted message appears on the right hand side in red as it is sent.
+
+In JT4G mode the spectrum and waterfall span 500Hz to 2 KHz. In PI4 mode the span is 500Hz to 1500 Hz.  There are 4 orange bands indicating the 4 data tone frequencies. The receiver needs to be tuned such that the received tones fall withing these orange bands.
 
 ### Controls
 
-At the bottom of the screen there are 6 touch buttons. Only 5 of these are currently in use. 
+At the bottom of the screen there are 6 touch buttons.
 
 Clear.   Clears the Message display.
 
@@ -54,6 +58,8 @@ Config. Displays a config page which allows settings to be changed.
 Record Button (Red Circle).  Displayed when a FAT formatted SD card is fitted. Click to start recording of text to the SD card. (GPS must be active). The filename will be based on the current date and time DDMMYY-HHMMSS.txt.
 
 Stop Button (White Square). Displayed when recording is in progress. Click to stop recording. 
+
+App Selecting this shows a new screen with three buttons which are used to select the required mode of operation. OOK48, JT4G Decoder or PI4 Decoder. When selected the system will reboot into the new mode. 
 
 Set Tx.  This shows a menu of the 10 stored messages to be used for transmit. Selecting a messsage allows it to be edited on the next screen. Pressing the Enter Button saves the message.
 
