@@ -17,7 +17,10 @@ import os
 import time
 import random
 import math
+import queue
 from datetime import datetime
+import numpy as np
+from PIL import Image, ImageTk
 
 CONFIG_FILE = "ook48_config.json"
 DEFAULT_CONFIG = {
@@ -63,11 +66,13 @@ class OOK48GUI:
         self.current_loc = ""
         self.last_decode_tag = None
         self.wf_bins = 0
-        self.wf_pixels = None   # numpy-style: list of rows, each a list of (r,g,b)
-        self.wf_height = 300    # number of history rows to keep  # tracks when a new message line starts
+        self.wf_height = 300    # number of history rows to keep
+        self.wf_queue = queue.Queue()  # serial thread -> GUI thread
+        self.wf_dirty = False  # tracks when a new message line starts
 
         self.build_ui()
         self.refresh_ports()
+        self._wf_poll()  # start queue drain loop
 
     # ------------------------------------------------------------------
     # Config persistence
@@ -365,43 +370,62 @@ class OOK48GUI:
         self.wf_rows = []       # list of raw bin lists (newest first)
         self.wf_tk_image = None
 
-    # ── colour map: 0=black, 64=blue, 128=cyan, 160=green, 200=yellow, 255=red
-    @staticmethod
-    def _magnitude_to_rgb(v):
-        """Map 0-255 magnitude to an RGB tuple using a thermal colour map."""
-        if v < 64:
-            t = v / 64.0
-            return (0, 0, int(255 * t))
-        elif v < 128:
-            t = (v - 64) / 64.0
-            return (0, int(255 * t), 255)
-        elif v < 160:
-            t = (v - 128) / 32.0
-            return (0, 255, int(255 * (1 - t)))
-        elif v < 200:
-            t = (v - 160) / 40.0
-            return (int(255 * t), 255, 0)
-        else:
-            t = (v - 200) / 55.0
-            return (255, int(255 * (1 - t)), 0)
+    # ── Pre-built lookup table: index 0-255 -> (R, G, B) thermal colourmap
+    _CMAP = None
+
+    @classmethod
+    def _build_cmap(cls):
+        """Build a 256-entry uint8 RGB lookup table once."""
+        if cls._CMAP is not None:
+            return
+        lut = np.zeros((256, 3), dtype=np.uint8)
+        for v in range(256):
+            if v < 64:
+                t = v / 64.0;  lut[v] = (0, 0, int(255*t))
+            elif v < 128:
+                t = (v-64)/64.0;  lut[v] = (0, int(255*t), 255)
+            elif v < 160:
+                t = (v-128)/32.0;  lut[v] = (0, 255, int(255*(1-t)))
+            elif v < 200:
+                t = (v-160)/40.0;  lut[v] = (int(255*t), 255, 0)
+            else:
+                t = (v-200)/55.0;  lut[v] = (255, int(255*(1-t)), 0)
+        cls._CMAP = lut
+
+    def _wf_poll(self):
+        """Drain the WF queue; redraw once if new rows arrived. Runs on GUI thread."""
+        got_data = False
+        while not self.wf_queue.empty():
+            try:
+                data = self.wf_queue.get_nowait()
+            except queue.Empty:
+                break
+            try:
+                bins = np.array([int(x) for x in data.split(",") if x.strip()], dtype=np.uint8)
+            except ValueError:
+                continue
+            if bins.size == 0:
+                continue
+            self.wf_bins = bins.size
+            self.wf_rows.insert(0, bins)
+            if len(self.wf_rows) > self.wf_height:
+                self.wf_rows.pop()
+            got_data = True
+
+        if got_data or self.wf_dirty:
+            self._wf_redraw()
+            self.wf_dirty = False
+            if self.wf_rows:
+                self.wf_info.config(text=f"{self.wf_bins} bins  |  {len(self.wf_rows)} rows")
+
+        self.root.after(33, self._wf_poll)   # ~30 fps cap
 
     def handle_wf(self, data):
-        """Parse a WF: line and prepend a new row to the waterfall."""
-        try:
-            bins = [int(x) for x in data.split(",") if x.strip()]
-        except ValueError:
-            return
-        if not bins:
-            return
-        self.wf_bins = len(bins)
-        self.wf_rows.insert(0, bins)
-        if len(self.wf_rows) > self.wf_height:
-            self.wf_rows.pop()
-        self._wf_redraw()
-        self.wf_info.config(text=f"{self.wf_bins} bins  |  {len(self.wf_rows)} rows")
+        """Legacy direct call path (fake data generator uses this)."""
+        self.wf_queue.put(data)
 
     def _wf_redraw(self):
-        """Render wf_rows onto the canvas as a scaled PhotoImage."""
+        """Render wf_rows to a PIL image and push to canvas. All numpy — no Python pixel loops."""
         if not self.wf_rows:
             return
         cw = self.wf_canvas.winfo_width()
@@ -409,41 +433,45 @@ class OOK48GUI:
         if cw < 2 or ch < 2:
             return
 
+        self._build_cmap()
+
         lo = self.wf_min_var.get()
         hi = self.wf_max_var.get()
         if hi <= lo:
             hi = lo + 1
-        span = hi - lo
 
-        # Build PPM-style pixel data for PhotoImage
-        # We stretch bins horizontally to fill canvas width,
-        # and each row is 1 pixel tall (canvas height determines how many rows show)
         rows_to_show = min(len(self.wf_rows), ch)
         bins = self.wf_bins or 1
 
-        # Build row strings for PhotoImage
-        img = tk.PhotoImage(width=cw, height=rows_to_show)
-        for y, row in enumerate(self.wf_rows[:rows_to_show]):
-            pixel_row = []
-            for x in range(cw):
-                bin_idx = int(x * bins / cw)
-                raw = row[bin_idx] if bin_idx < len(row) else 0
-                scaled = max(0, min(255, int((raw - lo) * 255 / span)))
-                r, g, b = self._magnitude_to_rgb(scaled)
-                pixel_row.append(f"#{r:02x}{g:02x}{b:02x}")
-            img.put("{" + " ".join(pixel_row) + "}", to=(0, y))
+        # Stack rows into a 2-D numpy array (rows x bins), uint8
+        arr = np.array(self.wf_rows[:rows_to_show], dtype=np.float32)
 
-        self.wf_tk_image = img   # keep reference
+        # Clip and scale to 0-255
+        arr = np.clip((arr - lo) * (255.0 / (hi - lo)), 0, 255).astype(np.uint8)
+
+        # Resize horizontally from bins -> cw using nearest-neighbour index mapping
+        x_idx = (np.arange(cw) * bins / cw).astype(np.int32)
+        x_idx = np.clip(x_idx, 0, bins - 1)
+        arr = arr[:, x_idx]           # shape: (rows_to_show, cw)
+
+        # Apply colourmap: arr indexes into _CMAP -> (rows_to_show, cw, 3)
+        rgb = self._CMAP[arr]
+
+        # Convert to PIL and then to ImageTk in one shot
+        pil_img = Image.fromarray(rgb, mode="RGB")
+        self.wf_tk_image = ImageTk.PhotoImage(pil_img)
+
         if self.wf_canvas_image_id is None:
-            self.wf_canvas_image_id = self.wf_canvas.create_image(0, 0, anchor=tk.NW, image=img)
+            self.wf_canvas_image_id = self.wf_canvas.create_image(0, 0, anchor=tk.NW,
+                                                                    image=self.wf_tk_image)
         else:
-            self.wf_canvas.itemconfig(self.wf_canvas_image_id, image=img)
+            self.wf_canvas.itemconfig(self.wf_canvas_image_id, image=self.wf_tk_image)
 
     def _wf_on_resize(self, event):
-        self._wf_redraw()
+        self.wf_dirty = True   # redraw on next poll cycle
 
     def wf_rescale(self):
-        self._wf_redraw()
+        self.wf_dirty = True
 
     def wf_auto_scale(self):
         """Set min/max from the actual data range."""
@@ -510,8 +538,9 @@ class OOK48GUI:
         self.current_loc = ""
         self.last_decode_tag = None
         self.wf_bins = 0
-        self.wf_pixels = None   # numpy-style: list of rows, each a list of (r,g,b)
-        self.wf_height = 300    # number of history rows to keep  # tracks when a new message line starts
+        self.wf_height = 300    # number of history rows to keep
+        self.wf_queue = queue.Queue()  # serial thread -> GUI thread
+        self.wf_dirty = False  # tracks when a new message line starts
         self.update_tx_button()
         self.log("[SYS] Disconnected", "sys")
 
@@ -556,7 +585,7 @@ class OOK48GUI:
             self.last_decode_tag = None
             self.log(f"PI4  {line[3:]}", "pi")
         elif line.startswith("WF:"):
-            self.handle_wf(line[3:])
+            self.wf_queue.put(line[3:])
         elif line.startswith("ACK:"):
 
             self.last_decode_tag = None
@@ -854,7 +883,11 @@ class OOK48GUI:
     # ------------------------------------------------------------------
     def append_decode(self, char, tag):
         """Append a single character to the decode window.
-        Inserts a GMT timestamp at the start of each new message."""
+        Inserts a GMT timestamp at the start of each new message.
+        <CR> (firmware escape for \\r) is treated as end-of-message."""
+        if char == "<CR>":
+            self.last_decode_tag = None   # next char gets a fresh timestamp
+            return
         if tag != self.last_decode_tag:
             ts = datetime.utcnow().strftime("%H:%M:%S")
             prefix = "RX" if tag == "rx" else "TX" if tag == "tx" else "  "
@@ -868,8 +901,8 @@ class OOK48GUI:
     def log(self, msg, tag="sys"):
         """Append a full line to the decode window."""
         ts = datetime.utcnow().strftime("%H:%M:%S")
-        self.decode_text.insert(tk.END, f"\n[{ts}z] {msg}\n", tag)
-        self._write_log(f"\n[{ts}z] {msg}\n")
+        self.decode_text.insert(tk.END, f"\n[{ts}z] {msg}", tag)
+        self._write_log(f"\n[{ts}z] {msg}")
         self.last_decode_tag = None
         self.decode_text.see(tk.END)
 
