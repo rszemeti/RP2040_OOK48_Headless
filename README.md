@@ -1,4 +1,4 @@
-# OOK48 Serial Control Version
+# OOK48 Serial Control
 
 A modified version of the RP2040 OOK48 LCD firmware that replaces the touchscreen
 GUI with a USB serial interface. The LCD is retained but used exclusively for the
@@ -59,11 +59,12 @@ All messages are newline-terminated ASCII at 115200 baud.
 |---------|-------------|
 | `RDY:<version>` | Boot complete, ready for config push |
 | `STA:<hh>:<mm>:<ss>,<lat>,<lon>,<locator>,<tx>` | Status line, once per second |
-| `MSG:<char>` | OOK48 decoded character |
+| `MSG:<char>` | OOK48 decoded character (one per message) |
 | `ERR:<char>` | OOK48 decode error character |
-| `TX:<char>` | Transmitted character echo |
+| `TX:<char>` | Transmitted character echo (one per transmitted character) |
 | `JT:<hh>:<mm>,<snr>,<message>` | JT4 decoded message |
 | `PI:<hh>:<mm>,<snr>,<message>` | PI4 decoded message |
+| `WF:<v0>,<v1>,...,<vN>` | Waterfall line — comma-separated 8-bit magnitudes, one per FFT bin |
 | `ACK:<command>` | Command acknowledged |
 | `ERR:<reason>` | Command rejected with reason |
 
@@ -78,7 +79,7 @@ All messages are newline-terminated ASCII at 115200 baud.
 | `SET:rxret:<0-999>` | RX timing retard in ms |
 | `SET:halfrate:<0\|1>` | 0=1s character period, 1=2s half-rate |
 | `SET:app:<0\|1\|2>` | Select app: 0=OOK48, 1=JT4, 2=PI4 (triggers reboot) |
-| `SET:msg:<0-9>:<text>` | Set TX message slot (use `{LOC}` for locator token) |
+| `SET:msg:<0-9>:<text>` | Set TX message slot |
 | `CMD:tx` | Switch to transmit |
 | `CMD:rx` | Switch to receive |
 | `CMD:txmsg:<0-9>` | Select active TX message slot |
@@ -89,6 +90,11 @@ All messages are newline-terminated ASCII at 115200 baud.
 
 ## Python GUI
 
+Two files are provided:
+
+- **`ook48_gui.py`** — standard GUI without waterfall
+- **`ook48_waterfall.py`** — adds a live waterfall display above the decode window
+
 ### Requirements
 ```
 pip install pyserial
@@ -98,22 +104,83 @@ pip install pyserial
 ```
 python ook48_gui.py
 ```
+or
+```
+python ook48_waterfall.py
+```
 
 ### Features
-- Auto-detects available serial ports
-- Pushes full config to firmware on connect
-- Settings saved to `ook48_config.json` between sessions — edit directly if preferred
-- **Decode tab** — colour-coded output: blue=RX, red=TX echo, orange=error,
-  green=JT4, purple=PI4; Save Log button writes session text to a local file
-- **Settings tab** — all firmware parameters with Apply and Save buttons
-- **TX Messages tab** — 10 message slots, supports `{LOC}` token for auto locator
-- TX start/stop and message slot selection
+
+**Connection bar** — port selector, connect/disconnect, GPS time and locator
+displayed live from `STA:` updates.
+
+**Decode / TX tab** — split vertically into RX (left) and TX (right) panes.
+
+- **RX pane** — colour-coded decode output: green=RX, red=TX echo, orange=error,
+  dark green=JT4, purple=PI4, grey=system. Each message is prefixed with a UTC
+  timestamp when its first character arrives. Double-clicking any received (green)
+  word sets it as "Their call" in the TX pane.
+  Clear button clears the screen only — the log file is unaffected.
+  Save Log writes the current screen content to a file.
+
+- **TX pane — Contest QSO pad** — designed for rapid contest operation:
+  - **My call** — your callsign, persisted between sessions
+  - **Their call** — type or double-click a received callsign to populate
+  - **Serial #** — contest serial number with +1 button, persisted between sessions
+  - All fields update the 10 slot buttons live as you type
+  - **Single click** on any slot button immediately transmits that slot
+  - **■ STOP TX** halts transmission and returns to RX
+
+**TX message slots** — 10 slots are pre-filled by entering your callsign.
+The slot layout is designed for a complete contest QSO:
+
+| Slot | Content |
+|------|---------|
+| 0 | `CQ {myCall}` |
+| 1 | `{theirCall} DE {myCall}` |
+| 2 | `{theirCall} 59{serial} {loc}` |
+| 3 | `{theirCall} 59{serial}` |
+| 4 | `{loc}` |
+| 5 | `ALL AGN` |
+| 6 | `LOC AGN` |
+| 7 | `RPT AGN` |
+| 8 | `RGR 73` |
+| 9 | `{myCall}` |
+
+`{loc}` is substituted with the live GPS locator received from the firmware.
+All other substitutions happen in the GUI before the message is sent to the firmware.
+
+**Settings tab** — all firmware parameters with Apply, Save, and Reboot buttons.
+
+**File logging** — everything shown in the decode window is also written to
+`ook48_YYYYMMDD.log` in the same directory, opened automatically on startup.
+Multiple sessions on the same day append to the same file with a session marker.
+
+### Waterfall (ook48_waterfall.py only)
+
+A waterfall display sits above the decode text in the RX pane. It renders `WF:`
+lines from the firmware as a scrolling thermal colour map (black → blue → cyan →
+green → yellow → red).
+
+- **Min / Max** spinboxes clip the colour range to the interesting signal level
+- **Auto** sets Min/Max from the actual data range
+- **Clear WF** clears the waterfall history
+- **▶ Fake WF** generates synthetic test data at 9 rows/second — useful for
+  testing the display without hardware connected
+
+The waterfall adapts automatically to however many bins the firmware sends and
+scales horizontally to fill the available window width.
 
 ### Config file (`ook48_config.json`)
-Created automatically on first run. Example:
+
+Created automatically on first run. Persists port, callsign, serial number, and
+all firmware settings between sessions. Example:
+
 ```json
 {
   "port": "COM3",
+  "callsign": "G4EML",
+  "serial": 1,
   "gpsbaud": 9600,
   "loclen": 8,
   "decmode": 0,
@@ -122,9 +189,9 @@ Created automatically on first run. Example:
   "halfrate": 0,
   "app": 0,
   "messages": [
-    "G4EML IO91",
-    "G4EML {LOC}",
-    "EMPTY",
+    "CQ G4EML",
+    "??? DE G4EML",
+    "??? 59001 {LOC}",
     ...
   ]
 }
@@ -133,6 +200,10 @@ Created automatically on first run. Example:
 ---
 
 ## Notes
+
+**GPS locator** — the locator shown in the connection bar is received from the
+firmware via `STA:` lines and is used live in the TX slot buttons. If GPS has not
+yet locked, `{LOC}` is passed through to the firmware for its own substitution.
 
 **GPS baud rate** — `autoBaud()` detection is removed. The firmware starts at 9600
 by default. If your GPS module runs at 38400, change `gpsbaud` in `ook48_config.json`
@@ -144,6 +215,6 @@ push is sent, to allow the firmware time to finish booting and send its `RDY:` m
 **App switching** — changing the app via `SET:app:` causes an immediate reboot. The
 Python GUI will show a disconnect; simply reconnect after a few seconds.
 
-**Touch calibration** — the touchscreen calibration data fields are still present in
-the settings struct for potential future use but the touch hardware is not used in
-this version.
+**TX echo** — transmitted characters are echoed back by the firmware as `TX:` lines
+and appear in red in the decode window as they are actually sent, one character at
+a time.

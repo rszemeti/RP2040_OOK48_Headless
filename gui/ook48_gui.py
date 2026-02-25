@@ -15,6 +15,8 @@ import threading
 import json
 import os
 import time
+import random
+import math
 from datetime import datetime
 
 CONFIG_FILE = "ook48_config.json"
@@ -48,8 +50,8 @@ APP_NAMES = ["OOK48", "JT4G Decoder", "PI4 Decoder"]
 class OOK48GUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("OOK48 Serial Control")
-        self.root.geometry("900x700")
+        self.root.title("OOK48 Serial Control + Waterfall")
+        self.root.geometry("1100x750")
         self.root.minsize(800, 600)
 
         self.serial_port = None
@@ -59,7 +61,10 @@ class OOK48GUI:
         self.log_file = self._open_log_file()
         self.tx_mode = False
         self.current_loc = ""
-        self.last_decode_tag = None  # tracks when a new message line starts
+        self.last_decode_tag = None
+        self.wf_bins = 0
+        self.wf_pixels = None   # numpy-style: list of rows, each a list of (r,g,b)
+        self.wf_height = 300    # number of history rows to keep  # tracks when a new message line starts
 
         self.build_ui()
         self.refresh_ports()
@@ -158,16 +163,49 @@ class OOK48GUI:
         pane = tk.PanedWindow(parent, orient=tk.HORIZONTAL, sashrelief=tk.RAISED, sashwidth=5)
         pane.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
 
-        # ---- Left pane: RX decoded messages ----
-        rx_frame = ttk.LabelFrame(pane, text="RX — Decoded Messages", padding=5)
+        # ---- Left pane: waterfall + decoded messages ----
+        rx_frame = ttk.LabelFrame(pane, text="RX", padding=5)
         pane.add(rx_frame, stretch="always", minsize=250)
 
-        btn_row = ttk.Frame(rx_frame)
+        # Waterfall
+        wf_frame = ttk.LabelFrame(rx_frame, text="Waterfall", padding=2)
+        wf_frame.pack(fill=tk.X)
+
+        wf_ctrl = ttk.Frame(wf_frame)
+        wf_ctrl.pack(fill=tk.X)
+        ttk.Label(wf_ctrl, text="Min:").pack(side=tk.LEFT)
+        self.wf_min_var = tk.IntVar(value=0)
+        ttk.Spinbox(wf_ctrl, from_=0, to=254, textvariable=self.wf_min_var,
+                    width=4, command=self.wf_rescale).pack(side=tk.LEFT, padx=(2,6))
+        ttk.Label(wf_ctrl, text="Max:").pack(side=tk.LEFT)
+        self.wf_max_var = tk.IntVar(value=255)
+        ttk.Spinbox(wf_ctrl, from_=1, to=255, textvariable=self.wf_max_var,
+                    width=4, command=self.wf_rescale).pack(side=tk.LEFT, padx=(2,6))
+        ttk.Button(wf_ctrl, text="Auto", command=self.wf_auto_scale).pack(side=tk.LEFT, padx=2)
+        ttk.Button(wf_ctrl, text="Clear WF", command=self.wf_clear).pack(side=tk.LEFT, padx=2)
+        self.fake_wf_running = False
+        self.fake_wf_btn = ttk.Button(wf_ctrl, text="▶ Fake WF", command=self.toggle_fake_wf)
+        self.fake_wf_btn.pack(side=tk.LEFT, padx=2)
+        self.wf_info = ttk.Label(wf_ctrl, text="", foreground="grey")
+        self.wf_info.pack(side=tk.RIGHT, padx=4)
+
+        self.wf_canvas = tk.Canvas(wf_frame, background="black", height=150)
+        self.wf_canvas.pack(fill=tk.X)
+        self.wf_canvas.bind("<Configure>", self._wf_on_resize)
+        self.wf_canvas_image_id = None
+        self.wf_rows = []
+        self.wf_tk_image = None
+
+        # Decoded messages
+        decode_frame = ttk.LabelFrame(rx_frame, text="Decoded Messages", padding=2)
+        decode_frame.pack(fill=tk.BOTH, expand=True, pady=(4,0))
+
+        btn_row = ttk.Frame(decode_frame)
         btn_row.pack(fill=tk.X)
         ttk.Button(btn_row, text="Clear", command=self.clear_decode).pack(side=tk.LEFT)
         ttk.Button(btn_row, text="Save Log…", command=self.save_log).pack(side=tk.LEFT, padx=5)
 
-        self.decode_text = scrolledtext.ScrolledText(rx_frame, font=("Courier", 11))
+        self.decode_text = scrolledtext.ScrolledText(decode_frame, font=("Courier", 11))
         self.decode_text.pack(fill=tk.BOTH, expand=True, pady=3)
         self.decode_text.tag_config("rx", foreground="green")
         self.decode_text.tag_config("tx", foreground="red")
@@ -297,6 +335,133 @@ class OOK48GUI:
         ttk.Button(btn_frame, text="Reboot Device", command=self.reboot_device).pack(side=tk.LEFT, padx=5)
 
     # ------------------------------------------------------------------
+    # Waterfall tab
+    # ------------------------------------------------------------------
+    def build_waterfall_tab(self, parent):
+        ctrl = ttk.Frame(parent)
+        ctrl.pack(fill=tk.X, padx=5, pady=3)
+
+        ttk.Label(ctrl, text="Min:").pack(side=tk.LEFT)
+        self.wf_min_var = tk.IntVar(value=0)
+        ttk.Spinbox(ctrl, from_=0, to=254, textvariable=self.wf_min_var,
+                    width=5, command=self.wf_rescale).pack(side=tk.LEFT, padx=(2,8))
+
+        ttk.Label(ctrl, text="Max:").pack(side=tk.LEFT)
+        self.wf_max_var = tk.IntVar(value=255)
+        ttk.Spinbox(ctrl, from_=1, to=255, textvariable=self.wf_max_var,
+                    width=5, command=self.wf_rescale).pack(side=tk.LEFT, padx=(2,8))
+
+        ttk.Button(ctrl, text="Auto", command=self.wf_auto_scale).pack(side=tk.LEFT, padx=4)
+        ttk.Button(ctrl, text="Clear", command=self.wf_clear).pack(side=tk.LEFT, padx=4)
+
+        self.wf_info = ttk.Label(ctrl, text="No data", foreground="grey")
+        self.wf_info.pack(side=tk.RIGHT, padx=8)
+
+        # Canvas fills the rest of the tab
+        self.wf_canvas = tk.Canvas(parent, background="black", cursor="crosshair")
+        self.wf_canvas.pack(fill=tk.BOTH, expand=True, padx=5, pady=(0,5))
+        self.wf_canvas.bind("<Configure>", self._wf_on_resize)
+        self.wf_canvas_image_id = None
+        self.wf_rows = []       # list of raw bin lists (newest first)
+        self.wf_tk_image = None
+
+    # ── colour map: 0=black, 64=blue, 128=cyan, 160=green, 200=yellow, 255=red
+    @staticmethod
+    def _magnitude_to_rgb(v):
+        """Map 0-255 magnitude to an RGB tuple using a thermal colour map."""
+        if v < 64:
+            t = v / 64.0
+            return (0, 0, int(255 * t))
+        elif v < 128:
+            t = (v - 64) / 64.0
+            return (0, int(255 * t), 255)
+        elif v < 160:
+            t = (v - 128) / 32.0
+            return (0, 255, int(255 * (1 - t)))
+        elif v < 200:
+            t = (v - 160) / 40.0
+            return (int(255 * t), 255, 0)
+        else:
+            t = (v - 200) / 55.0
+            return (255, int(255 * (1 - t)), 0)
+
+    def handle_wf(self, data):
+        """Parse a WF: line and prepend a new row to the waterfall."""
+        try:
+            bins = [int(x) for x in data.split(",") if x.strip()]
+        except ValueError:
+            return
+        if not bins:
+            return
+        self.wf_bins = len(bins)
+        self.wf_rows.insert(0, bins)
+        if len(self.wf_rows) > self.wf_height:
+            self.wf_rows.pop()
+        self._wf_redraw()
+        self.wf_info.config(text=f"{self.wf_bins} bins  |  {len(self.wf_rows)} rows")
+
+    def _wf_redraw(self):
+        """Render wf_rows onto the canvas as a scaled PhotoImage."""
+        if not self.wf_rows:
+            return
+        cw = self.wf_canvas.winfo_width()
+        ch = self.wf_canvas.winfo_height()
+        if cw < 2 or ch < 2:
+            return
+
+        lo = self.wf_min_var.get()
+        hi = self.wf_max_var.get()
+        if hi <= lo:
+            hi = lo + 1
+        span = hi - lo
+
+        # Build PPM-style pixel data for PhotoImage
+        # We stretch bins horizontally to fill canvas width,
+        # and each row is 1 pixel tall (canvas height determines how many rows show)
+        rows_to_show = min(len(self.wf_rows), ch)
+        bins = self.wf_bins or 1
+
+        # Build row strings for PhotoImage
+        img = tk.PhotoImage(width=cw, height=rows_to_show)
+        for y, row in enumerate(self.wf_rows[:rows_to_show]):
+            pixel_row = []
+            for x in range(cw):
+                bin_idx = int(x * bins / cw)
+                raw = row[bin_idx] if bin_idx < len(row) else 0
+                scaled = max(0, min(255, int((raw - lo) * 255 / span)))
+                r, g, b = self._magnitude_to_rgb(scaled)
+                pixel_row.append(f"#{r:02x}{g:02x}{b:02x}")
+            img.put("{" + " ".join(pixel_row) + "}", to=(0, y))
+
+        self.wf_tk_image = img   # keep reference
+        if self.wf_canvas_image_id is None:
+            self.wf_canvas_image_id = self.wf_canvas.create_image(0, 0, anchor=tk.NW, image=img)
+        else:
+            self.wf_canvas.itemconfig(self.wf_canvas_image_id, image=img)
+
+    def _wf_on_resize(self, event):
+        self._wf_redraw()
+
+    def wf_rescale(self):
+        self._wf_redraw()
+
+    def wf_auto_scale(self):
+        """Set min/max from the actual data range."""
+        if not self.wf_rows:
+            return
+        all_vals = [v for row in self.wf_rows for v in row]
+        self.wf_min_var.set(min(all_vals))
+        self.wf_max_var.set(max(all_vals))
+        self._wf_redraw()
+
+    def wf_clear(self):
+        self.wf_rows.clear()
+        if self.wf_canvas_image_id:
+            self.wf_canvas.delete(self.wf_canvas_image_id)
+            self.wf_canvas_image_id = None
+        self.wf_info.config(text="No data")
+
+    # ------------------------------------------------------------------
     # Connection management
     # ------------------------------------------------------------------
     def refresh_ports(self):
@@ -343,7 +508,10 @@ class OOK48GUI:
         self.status_label.config(text="Disconnected", foreground="red")
         self.tx_mode = False
         self.current_loc = ""
-        self.last_decode_tag = None  # tracks when a new message line starts
+        self.last_decode_tag = None
+        self.wf_bins = 0
+        self.wf_pixels = None   # numpy-style: list of rows, each a list of (r,g,b)
+        self.wf_height = 300    # number of history rows to keep  # tracks when a new message line starts
         self.update_tx_button()
         self.log("[SYS] Disconnected", "sys")
 
@@ -387,7 +555,10 @@ class OOK48GUI:
         elif line.startswith("PI:"):
             self.last_decode_tag = None
             self.log(f"PI4  {line[3:]}", "pi")
+        elif line.startswith("WF:"):
+            self.handle_wf(line[3:])
         elif line.startswith("ACK:"):
+
             self.last_decode_tag = None
             self.bottom_status.config(text=f"✓ {line}")
         elif line.startswith("ERR:"):
@@ -639,6 +810,31 @@ class OOK48GUI:
             self.theircall_var.set(word.upper())
             self.bottom_status.config(text=f"Their call set: {word.upper()}")
         return "break"   # prevent default word-selection behaviour
+
+    def _fake_wf_tick(self):
+        """Generate a fake waterfall row and schedule the next one."""
+        if not self.fake_wf_running:
+            return
+        bins = 64
+        t = time.time()
+        row = []
+        for i in range(bins):
+            # Noise floor
+            v = random.randint(10, 40)
+            # A couple of drifting signals
+            for centre, strength in [(20, 180), (45, 220), (10, 100)]:
+                dist = abs(i - (centre + 4 * math.sin(t * 0.3 + centre)))
+                if dist < 3:
+                    v = max(v, int(strength * max(0, 1 - dist / 3) + random.randint(-15, 15)))
+            row.append(max(0, min(255, v)))
+        self.handle_wf(",".join(str(x) for x in row))
+        self.root.after(111, self._fake_wf_tick)  # ~9 rows/sec
+
+    def toggle_fake_wf(self):
+        self.fake_wf_running = not getattr(self, "fake_wf_running", False)
+        self.fake_wf_btn.config(text="■ Stop fake WF" if self.fake_wf_running else "▶ Fake WF")
+        if self.fake_wf_running:
+            self._fake_wf_tick()
 
     def clear_decode(self):
         self.decode_text.delete("1.0", tk.END)

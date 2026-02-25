@@ -1,0 +1,28 @@
+
+--- Session started 2026-02-25 01:25:37z ---
+
+--- Session started 2026-02-25 01:27:30z ---
+
+--- Session started 2026-02-25 01:29:15z ---
+
+[08:01:55z] [SYS] Connected to COM3
+
+[08:01:56z] [SYS] Pushing config to device…
+
+[08:01:57z] [SYS] Config push complete
+
+[08:02:11z RX] OOK48G4EMLIO91WMOOK48OOK48G4EMLIO91WMOOK48G4EMLG4EMLTEST
+[08:04:56z RX] IO91WMTEST
+[08:05:18z RX] G4EML
+[08:05:29z RX] TESTTEST
+[08:24:19z] [SYS] Disconnected
+
+[08:24:48z] [SYS] Connected to COM3
+
+[08:24:50z] [SYS] Pushing config to device…
+
+[08:24:51z] [SYS] Config push complete
+
+[08:24:51z] [SYS] Device ready: 0.20-SIM
+
+[08:25:03z RX] 
