@@ -1,3 +1,5 @@
+#include "fano.h"
+
 /*This file is part of wsprd.
  
  File name: fano.c
