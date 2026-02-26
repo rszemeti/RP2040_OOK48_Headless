@@ -1,0 +1,12 @@
+# PlatformIO build output
+arduino/.pio/
+
+# Python cache
+gui/__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+
+# GUI config and log files (user-specific, not tracked)
+gui/*.json
+gui/*.log
