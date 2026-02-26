@@ -220,6 +220,7 @@ class OOK48GUI:
         # Accumulator panel (between waterfall and message log)
         self.acc_panel = AccumulatorPanel(rx_frame, on_state_change=self.on_acc_state_change)
         self.acc_panel.pack(fill=tk.X, pady=(4, 0))
+        self.acc_panel.set_confidence_threshold(self.config.get("confidence", 0.180))
 
         # Decoded messages
         decode_frame = ttk.LabelFrame(rx_frame, text="Decoded Messages", padding=2)
@@ -738,6 +739,8 @@ class OOK48GUI:
         self.config["rxret"] = int(self.rxret_var.get())
         self.config["halfrate"] = self.hr_combo.current()
         self.config["confidence"] = round(float(self.confidence_var.get()), 3)
+        if hasattr(self, "acc_panel") and self.acc_panel:
+            self.acc_panel.set_confidence_threshold(self.config["confidence"])
         new_app = self.app_combo.current()
 
         if self.connected:

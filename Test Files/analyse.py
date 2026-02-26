@@ -55,6 +55,9 @@ MIN_MSG_LEN      = 3
 MAX_MSG_LEN      = 30
 
 CONFIDENCE_THRESHOLD = 0.180   # from empirical analysis - below this, return UNK
+THRESH_SWEEP_MIN    = 0.05
+THRESH_SWEEP_MAX    = 0.40
+THRESH_SWEEP_STEP   = 0.01
 UNK_CODEWORD         = 0xF0    # spare 4-from-8 pattern (11110000) = uncertain
 UNK_CHAR             = '\x7e'  # displayed as ~ in serial stream as <UNK>
 
@@ -90,7 +93,7 @@ def get_symbol_magnitudes(tone_ch, char_start):
             cache[sym] = mags
     return cache.max(axis=1)
 
-def decode_from_magnitudes(temp, use_confidence=True):
+def decode_from_magnitudes(temp, use_confidence=True, confidence_threshold=CONFIDENCE_THRESHOLD):
     """
     Pick 4 largest magnitudes, decode. Matches firmware exactly.
     If use_confidence=True and confidence is below threshold, return UNK_CHAR.
@@ -113,7 +116,7 @@ def decode_from_magnitudes(temp, use_confidence=True):
     for b in bits:
         byte_val = (byte_val << 1) | b
 
-    if use_confidence and confidence < CONFIDENCE_THRESHOLD:
+    if use_confidence and confidence < confidence_threshold:
         return UNK_CHAR, bits, confidence
 
     char_code = DECODE_4FROM8[byte_val] if byte_val < len(DECODE_4FROM8) else 0
@@ -136,6 +139,33 @@ def score_decodes(decoded_chars, phase, msg_len):
     scored  = sum(1 for c in decoded_chars if c != UNK_CHAR)
     unk     = sum(1 for c in decoded_chars if c == UNK_CHAR)
     return correct, scored, unk
+
+def threshold_sweep(raw_mags, msg_len=MSG_LEN):
+    thresholds = np.arange(THRESH_SWEEP_MIN, THRESH_SWEEP_MAX + 1e-9, THRESH_SWEEP_STEP)
+    err_pct = []
+    unk_pct = []
+    total_err_pct = []
+
+    for thr in thresholds:
+        chars = [decode_from_magnitudes(m, use_confidence=True, confidence_threshold=float(thr))[0]
+                 for m in raw_mags]
+        phase, _ = find_phase(chars, msg_len)
+        correct, scored, unk = score_decodes(chars, phase, msg_len)
+        err = 1.0 - correct / scored if scored > 0 else 1.0
+        up = 100.0 * unk / len(chars) if chars else 0.0
+        ep = 100.0 * err
+        tep = ep * (1.0 - up / 100.0) + up
+
+        err_pct.append(ep)
+        unk_pct.append(up)
+        total_err_pct.append(tep)
+
+    return {
+        'thresholds': thresholds.tolist(),
+        'err_pct': err_pct,
+        'unk_pct': unk_pct,
+        'total_err_pct': total_err_pct,
+    }
 
 # ---------------------------------------------------------------------------
 def detect_message_length(raw_mags, min_l=MIN_MSG_LEN, max_l=MAX_MSG_LEN, verbose=True):
@@ -301,6 +331,7 @@ def decode_file(filename, plot=True, verbose=True, max_accumulate=8):
         'single_err'   : single_err,
         'acc_results'  : acc_results,
         'raw_mags_len' : len(raw_mags),
+        'threshold_curve': threshold_sweep(raw_mags),
     }
 
 # ---------------------------------------------------------------------------
@@ -352,10 +383,9 @@ def main():
         acc4   = [100 * r['acc_results'].get(4,(0,0,1))[2] for _, r in snr_vals]
         acc8   = [100 * r['acc_results'].get(8,(0,0,1))[2] for _, r in snr_vals]
 
-        fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+        fig, ax = plt.subplots(figsize=(9, 5))
 
-        # Left: error rate curves
-        ax = axes[0]
+        # Error rate curves
         ax.plot(snrs, single, 'o-',  color='steelblue',  linewidth=2, label='Single pass')
         ax.plot(snrs, acc2,   's--', color='darkorange', linewidth=2, label='Accumulated x2')
         ax.plot(snrs, acc4,   '^--', color='darkgreen',  linewidth=2, label='Accumulated x4')
@@ -368,23 +398,37 @@ def main():
         ax.legend(fontsize=9)
         ax.grid(True, alpha=0.3)
 
-        # Right: detected message length vs SNR
-        ax2 = axes[1]
-        detected_Ls = [r['detected_L'] for _, r in snr_vals]
-        ax2.plot(snrs, detected_Ls, 'o-', color='purple', linewidth=2)
-        ax2.axhline(MSG_LEN, color='grey', linestyle='--', linewidth=1,
-                    label=f'True length ({MSG_LEN})')
-        ax2.set_xlabel("SNR (dB)")
-        ax2.set_ylabel("Detected message length")
-        ax2.set_title("Blind Message Length Detection")
-        ax2.invert_xaxis()
-        ax2.legend(fontsize=9)
-        ax2.grid(True, alpha=0.3)
-        ax2.set_ylim(0, MAX_MSG_LEN + 2)
-
         plt.tight_layout()
         plt.savefig("ook48_snr_curve.png", dpi=150)
         print(f"\nSNR curve saved to: ook48_snr_curve.png")
+        plt.show()
+
+    curves = [r.get('threshold_curve') for r in results if r.get('threshold_curve')]
+    if curves:
+        thresholds = np.array(curves[0]['thresholds'], dtype=np.float64)
+        mean_err = np.mean(np.array([c['err_pct'] for c in curves], dtype=np.float64), axis=0)
+        mean_unk = np.mean(np.array([c['unk_pct'] for c in curves], dtype=np.float64), axis=0)
+        mean_total = np.mean(np.array([c['total_err_pct'] for c in curves], dtype=np.float64), axis=0)
+
+        best_idx = int(np.argmin(mean_total))
+        best_thr = float(thresholds[best_idx])
+
+        fig, ax = plt.subplots(figsize=(9, 5))
+        ax.plot(thresholds, mean_total, 'o-', color='steelblue', linewidth=2, label='Total char error % (UNK counted)')
+        ax.plot(thresholds, mean_unk, 's--', color='darkorange', linewidth=2, label='UNK %')
+        ax.axvline(CONFIDENCE_THRESHOLD, color='grey', linestyle='--', linewidth=1,
+                   label=f'Current threshold ({CONFIDENCE_THRESHOLD:.3f})')
+        ax.plot([best_thr], [mean_total[best_idx]], 'D', color='crimson', markersize=7,
+                label=f'Best total error ({best_thr:.3f})')
+        ax.set_xlabel('Confidence threshold')
+        ax.set_ylabel('Percent (%)')
+        ax.set_title('OOK48 Confidence Threshold Sweep')
+        ax.grid(True, alpha=0.3)
+        ax.legend(fontsize=9)
+        plt.tight_layout()
+        plt.savefig('ook48_confidence_threshold_curve.png', dpi=150)
+        print(f"Confidence threshold curve saved to: ook48_confidence_threshold_curve.png")
+        print(f"Best threshold from these files: {best_thr:.3f} (current {CONFIDENCE_THRESHOLD:.3f})")
         plt.show()
 
 if __name__ == "__main__":

@@ -23,7 +23,7 @@ import tkinter as tk
 from tkinter import ttk
 import numpy as np
 import time
-from ook_accumulator import OOK48Accumulator, CONFIDENCE_THRESHOLD, COPY_THRESHOLD
+from ook_accumulator import OOK48Accumulator, DEFAULT_CONFIDENCE_THRESHOLD, COPY_THRESHOLD
 
 # ---------------------------------------------------------------------------
 # Colour scheme — dark terminal aesthetic to match radio software
@@ -43,8 +43,8 @@ STATE_STYLE = {
 }
 
 # Confidence → background colour gradient
-def conf_colour(conf):
-    if conf < CONFIDENCE_THRESHOLD:
+def conf_colour(conf, confidence_threshold):
+    if conf < confidence_threshold:
         return '#6b1a1a', '#ff6666'   # bg, fg  — red
     elif conf < 0.35:
         return '#6b4a00', '#ffaa33'   # amber
@@ -73,7 +73,7 @@ class CharCell(tk.Frame):
                                bg=BG_CELL, fg='#444444', width=1)
         self._label.pack(expand=True)
 
-    def update(self, char, confidence, flipped=False):
+    def update(self, char, confidence, confidence_threshold, flipped=False):
         if char == '\r':
             display = '↵'
         elif char == '~':
@@ -81,11 +81,11 @@ class CharCell(tk.Frame):
         else:
             display = char
 
-        bg, fg = conf_colour(confidence)
+        bg, fg = conf_colour(confidence, confidence_threshold)
         if flipped:
             bg = BG_CELL_HL
 
-        self.configure(bg=bg, highlightbackground='#444444' if confidence > CONFIDENCE_THRESHOLD else '#2a2a2a')
+        self.configure(bg=bg, highlightbackground='#444444' if confidence > confidence_threshold else '#2a2a2a')
         self._label.configure(text=display, bg=bg, fg=fg)
 
     def clear(self):
@@ -131,7 +131,7 @@ class AccumulatorRow(tk.Frame):
             cell.pack(side=tk.LEFT, padx=1, pady=2)
             self._cells.append(cell)
 
-    def update_chars(self, chars, repeats):
+    def update_chars(self, chars, repeats, confidence_threshold):
         """
         chars: list of {char, confidence, flipped} dicts from accumulator state.
         Only updates cells where count >= depth.
@@ -141,7 +141,7 @@ class AccumulatorRow(tk.Frame):
         active = 0
         for i, (cell, c) in enumerate(zip(self._cells, chars)):
             if c['count'] >= self.depth:
-                cell.update(c['char'], c['confidence'], c['flipped'])
+                cell.update(c['char'], c['confidence'], confidence_threshold, c['flipped'])
                 active += 1
             else:
                 cell.clear()
@@ -176,6 +176,7 @@ class AccumulatorPanel(tk.Frame):
         self._on_copy_cb = on_copy
         self._on_state_change_cb = on_state_change
         self._last_state_label = None
+        self._confidence_threshold = DEFAULT_CONFIDENCE_THRESHOLD
 
         # Header bar
         header = tk.Frame(self, bg=BG_PANEL)
@@ -209,9 +210,19 @@ class AccumulatorPanel(tk.Frame):
         self._master = OOK48Accumulator(
             on_update=self._on_update,
             on_copy=self._on_copy,
+            confidence_threshold=self._confidence_threshold,
         )
         # Shadow accumulators at fixed depths share msg_len once known
-        self._depth_accs = {d: OOK48Accumulator() for d in ROWS}
+        self._depth_accs = {
+            d: OOK48Accumulator(confidence_threshold=self._confidence_threshold)
+            for d in ROWS
+        }
+
+    def set_confidence_threshold(self, value):
+        self._confidence_threshold = float(value)
+        self._master.set_confidence_threshold(self._confidence_threshold)
+        for acc in self._depth_accs.values():
+            acc.set_confidence_threshold(self._confidence_threshold)
 
     def push(self, mags):
         """Feed one character's magnitudes. Call from GUI serial handler."""
@@ -252,7 +263,7 @@ class AccumulatorPanel(tk.Frame):
             ds = self._depth_accs[depth].get_display_state()
             if ds['chars']:
                 # Clamp: only show chars where count >= depth
-                row.update_chars(ds['chars'], ds['repeats'])
+                row.update_chars(ds['chars'], ds['repeats'], self._confidence_threshold)
             else:
                 row.clear()
 

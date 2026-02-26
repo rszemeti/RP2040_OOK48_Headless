@@ -42,7 +42,7 @@ DECODE_4FROM8 = [
     126,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 ]
 
-CONFIDENCE_THRESHOLD = 0.180   # per-char: below this → UNK
+DEFAULT_CONFIDENCE_THRESHOLD = 0.180   # per-char: below this → UNK
 COPY_THRESHOLD       = 0.65    # mean confidence to write confirmed copy
 COLLAPSE_THRESHOLD   = 0.25    # mean confidence below this = bad cycle
 COLLAPSE_WINDOW      = 3       # consecutive bad cycles triggers reset
@@ -59,12 +59,12 @@ class AccState(Enum):
 
 
 # ---------------------------------------------------------------------------
-def _decode_mags(mags, use_confidence=True):
+def _decode_mags(mags, use_confidence=True, confidence_threshold=DEFAULT_CONFIDENCE_THRESHOLD):
     ranked     = np.sort(mags)[::-1]
     rng        = ranked[0] - ranked[7]
     gap        = ranked[3] - ranked[4]
     confidence = gap / rng if rng > 0 else 0.0
-    if use_confidence and confidence < CONFIDENCE_THRESHOLD:
+    if use_confidence and confidence < confidence_threshold:
         return UNK_CHAR, confidence
     bits, temp = [0]*8, mags.copy()
     for _ in range(4):
@@ -110,12 +110,12 @@ class CharacterState:
         self.confidence  = 0.0
         self.flipped     = False
 
-    def update(self, mags):
+    def update(self, mags, confidence_threshold):
         prev             = self.char
         self.accumulated += mags
         self.count       += 1
         avg              = self.accumulated / self.count
-        self.char, self.confidence = _decode_mags(avg)
+        self.char, self.confidence = _decode_mags(avg, confidence_threshold=confidence_threshold)
         self.flipped     = (self.char != prev and prev not in ('?', UNK_CHAR))
 
     def reset(self):
@@ -135,11 +135,13 @@ class OOK48Accumulator:
       on_reset(reason)  — self-reset after collapse
     """
 
-    def __init__(self, on_update=None, on_copy=None, on_reset=None, msg_len=None):
+    def __init__(self, on_update=None, on_copy=None, on_reset=None, msg_len=None,
+                 confidence_threshold=DEFAULT_CONFIDENCE_THRESHOLD):
         self.on_update = on_update
         self.on_copy   = on_copy
         self.on_reset  = on_reset
         self.msg_len   = msg_len
+        self.confidence_threshold = float(confidence_threshold)
 
         self._do_reset(initial=True)
 
@@ -168,6 +170,9 @@ class OOK48Accumulator:
         if self.msg_len and 0 <= phase < self.msg_len:
             self._phase = phase
 
+    def set_confidence_threshold(self, value):
+        self.confidence_threshold = float(value)
+
     # ------------------------------------------------------------------
     def push(self, mags):
         mags = np.asarray(mags, dtype=np.float64)
@@ -186,7 +191,7 @@ class OOK48Accumulator:
             self._chars = [CharacterState() for _ in range(self.msg_len)]
 
         pos = (self._seq - 1) % self.msg_len
-        self._chars[pos].update(mags)
+        self._chars[pos].update(mags, self.confidence_threshold)
 
         if self._seq % self.msg_len == 0:
             self._end_of_cycle()
@@ -315,9 +320,9 @@ class OOK48Accumulator:
         }
 
     @staticmethod
-    def confidence_colour(conf):
+    def confidence_colour(conf, confidence_threshold=DEFAULT_CONFIDENCE_THRESHOLD):
         """(bg_hex, fg_hex) for GUI character cells."""
-        if conf < CONFIDENCE_THRESHOLD: return '#6b1a1a', '#ff6666'
+        if conf < confidence_threshold: return '#6b1a1a', '#ff6666'
         elif conf < 0.35:               return '#6b4a00', '#ffaa33'
         elif conf < 0.55:               return '#5a5a00', '#eeee44'
         elif conf < COPY_THRESHOLD:     return '#1a5a1a', '#66ee66'
