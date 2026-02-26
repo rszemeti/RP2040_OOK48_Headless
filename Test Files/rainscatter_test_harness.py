@@ -50,6 +50,7 @@ OOK_END_HZ = 1098.0
 DEFAULT_BANDWIDTH_HZ = 3500
 DEFAULT_POWER_STEPS_DB = [10, 6, 3, 2, 1]
 EXPECTED_MESSAGE = "OOK48 TEST\r"
+TARGET_DURATION_SEC = 120
 
 
 def rms(x):
@@ -241,7 +242,7 @@ def _to_dtype_and_stereo(tone_out, click, src_dtype):
     return tone_cast
 
 
-def make_noise_shift_files(input_file, out_dir, power_steps_db, bandwidth_hz):
+def make_noise_shift_files(input_file, out_dir, power_steps_db, bandwidth_hz, target_seconds=TARGET_DURATION_SEC):
     sr, data = wavfile.read(input_file)
 
     if data.ndim == 1:
@@ -272,9 +273,24 @@ def make_noise_shift_files(input_file, out_dir, power_steps_db, bandwidth_hz):
     if not activity:
         raise RuntimeError("Could not derive symbol activity from source file")
 
-    on_count = sum(sum(1 for b in row if b) for row in activity)
-    total_count = len(activity) * 8
-    print(f"Detected activity map: {on_count}/{total_count} symbols ON")
+    msg_len = len(EXPECTED_MESSAGE)
+    usable = (len(activity) // msg_len) * msg_len
+    if usable < msg_len:
+        raise RuntimeError("Not enough activity rows to form one full message cycle")
+
+    act_arr = np.array(activity[:usable], dtype=np.int32).reshape((-1, msg_len, 8))
+    activity_cycle = (act_arr.mean(axis=0) >= 0.5)
+
+    on_count = int(activity_cycle.sum())
+    total_count = int(activity_cycle.size)
+    print(f"Detected activity cycle: {on_count}/{total_count} symbols ON (L={msg_len})")
+
+    target_samples = int(target_seconds * sr)
+    n_chars = target_seconds
+
+    click_half_width = int(sr * 0.002)
+    first_click = int(click_positions[0])
+    click_template = click[max(0, first_click - click_half_width):first_click + click_half_width]
 
     base = os.path.splitext(os.path.basename(input_file))[0]
     os.makedirs(out_dir, exist_ok=True)
@@ -283,18 +299,26 @@ def make_noise_shift_files(input_file, out_dir, power_steps_db, bandwidth_hz):
     baseline_rms = signal_rms if signal_rms > 0 else (0.01 * full_scale)
 
     for step_db in power_steps_db:
-        low_noise = np.random.normal(0.0, 1.0, len(tone))
+        low_noise = np.random.normal(0.0, 1.0, target_samples)
         low_noise = bandlimit_noise(low_noise, sr, bandwidth_hz)
         low_r = rms(low_noise)
         if low_r > 0:
             low_noise *= baseline_rms / low_r
 
         tone_out = low_noise.copy()
+        click_out = np.zeros(target_samples, dtype=np.float64)
         high_gain = 10 ** (step_db / 20.0)
 
-        for cidx, click_pos in enumerate(click_positions[:len(activity)]):
-            char_start = int(click_pos)
-            row = activity[cidx]
+        for cidx in range(n_chars):
+            char_start = cidx * sr
+            if char_start >= target_samples:
+                break
+            row = activity_cycle[cidx % msg_len]
+
+            cend = min(char_start + len(click_template), target_samples)
+            if cend > char_start:
+                click_out[char_start:cend] = click_template[:cend - char_start]
+
             for sym in range(8):
                 if not row[sym]:
                     continue
@@ -314,7 +338,7 @@ def make_noise_shift_files(input_file, out_dir, power_steps_db, bandwidth_hz):
 
         out_name = f"{base}_RS_PWR+{step_db}dB.wav"
         out_path = os.path.join(out_dir, out_name)
-        out_data = _to_dtype_and_stereo(tone_out, click, data.dtype)
+        out_data = _to_dtype_and_stereo(tone_out, click_out, data.dtype)
         wavfile.write(out_path, sr, out_data)
         out_files.append(out_path)
 
