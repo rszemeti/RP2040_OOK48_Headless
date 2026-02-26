@@ -202,13 +202,13 @@ class OOK48GUI:
 
         mode_row = ttk.Frame(wf_frame)
         mode_row.pack(fill=tk.X, pady=(2, 0))
-        self.decmode_main_var = tk.BooleanVar(value=(int(self.config.get("decmode", 0)) == 2))
-        ttk.Checkbutton(
+        self.decmode_main_btn = ttk.Button(
             mode_row,
-            text="Rainscatter decode",
-            variable=self.decmode_main_var,
+            text="",
             command=self.on_main_decode_toggle,
-        ).pack(side=tk.LEFT, padx=2)
+        )
+        self.decmode_main_btn.pack(side=tk.LEFT, padx=2)
+        self._sync_decode_mode_controls()
 
         self.wf_canvas = tk.Canvas(wf_frame, background="black", height=150)
         self.wf_canvas.pack(fill=tk.X)
@@ -761,14 +761,17 @@ class OOK48GUI:
 
     def _sync_decode_mode_controls(self):
         decmode = int(self.config.get("decmode", 0))
-        if hasattr(self, "decmode_main_var"):
-            self.decmode_main_var.set(decmode == 2)
+        if hasattr(self, "decmode_main_btn"):
+            if decmode == 2:
+                self.decmode_main_btn.config(text="Decode: Rainscatter (click for Normal)")
+            else:
+                self.decmode_main_btn.config(text="Decode: Normal (click for Rainscatter)")
         if hasattr(self, "dm_combo"):
             self.dm_combo.current(1 if decmode == 2 else 0)
 
     def on_main_decode_toggle(self):
         """Main-page quick toggle: Normal (0) <-> Rainscatter (2)."""
-        self.config["decmode"] = 2 if self.decmode_main_var.get() else 0
+        self.config["decmode"] = 0 if int(self.config.get("decmode", 0)) == 2 else 2
         self._sync_decode_mode_controls()
         if self.connected:
             self.send(f"SET:decmode:{self.config['decmode']}")
