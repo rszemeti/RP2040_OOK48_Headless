@@ -1,6 +1,6 @@
 #pragma once
 
-#define VERSION "Version 0.21"
+#define VERSION "Version 0.25"
 
 // GPIO Pin assignments
 #define GPSTXPin    4       // Serial data to GPS module

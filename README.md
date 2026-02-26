@@ -1,9 +1,75 @@
-# OOK48 Serial Control
+# OOK48 Headless Serial + Desktop GUI
 
-A modified version of the RP2040 OOK48 LCD firmware that replaces the touchscreen
-GUI with a USB serial interface. The LCD is retained but used exclusively for the
-spectrum and waterfall display. All control, configuration, and decode output is
-handled via a Python GUI on a connected laptop.
+A modified RP2040 OOK48 build where the touchscreen UI is replaced by a USB serial
+control path and a desktop Python GUI.
+
+The LCD remains active for spectrum/waterfall rendering, while all operating
+controls, decode display, message management, and logging move to the PC GUI.
+
+## GUI (Front and Center)
+
+![OOK48 GUI](Documents/gui-main.png)
+
+The GUI is now the primary operator interface:
+
+- **Live decode console** with RX/TX/error colouring and UTC timestamps
+- **Contest TX pad** with dynamic templates (`{myCall}`, `{theirCall}`, `{serial}`, `{loc}`)
+- **Confidence-aware decode pipeline** with unknown-gating and accumulator state display
+- **Waterfall controls** (clip, auto-scale, clear) and decode mode quick-toggle
+- **Persistent config** for callsign, timing, mode, and TX templates
+
+---
+
+## Performance vs Single-Repeat Decode
+
+The firmware stream is effectively single-repeat per symbol period, but the GUI adds a
+**soft-accumulator repeat** on top of that data:
+
+- single-repeat characters are shown immediately (fast feedback)
+- repeated cycles are accumulated per position and re-decoded with improved confidence
+- unstable copy can be promoted to stable copy once mean confidence rises
+- low-confidence runs auto-collapse and reset cleanly
+
+This gives a practical improvement in weak/marginal conditions without changing the
+core RF/FFT/radio processing code.
+
+Current confidence gates used by the GUI accumulator:
+
+- per-character unknown gate: `0.180` (below this, symbol is treated as unknown)
+- confirmed-copy threshold: `0.65` (mean confidence)
+- collapse threshold: `0.25` for `3` consecutive cycles
+
+### Expected decode levels (measured)
+
+Normal mode (good copy guideline):
+
+- 1 repeat: `-17`
+- 2 repeats: `-19`
+- 4 repeats: `-20`
+- 8 repeats: `-21`
+
+Rainscatter mode (good copy guideline):
+
+- 1 repeat: `+5 dB`
+- 2 repeats: `+3 dB`
+- 4 repeats: `+2 dB`
+- 8 repeats: `+1.5 dB`
+
+---
+
+## Rainscatter Mode (Decode Mode 2)
+
+`SET:decmode:2` enables **Rainscatter** mode, which uses wideband power behaviour
+intended for bursty/scatter conditions rather than stable narrowband copy.
+
+Operationally:
+
+- firmware switches to decode mode `2`
+- GUI can toggle Normal/Rainscatter from the RX pane button
+- if connected firmware does not support mode `2`, GUI falls back to Normal safely
+
+Use Rainscatter when copy is intermittent and burst-dominated; use Normal for steady
+paths.
 
 ---
 
@@ -79,7 +145,7 @@ All messages are newline-terminated ASCII at 115200 baud.
 | `SET:rxret:<0-999>` | RX timing retard in ms |
 | `SET:halfrate:<0\|1>` | 0=1s character period, 1=2s half-rate |
 | `SET:app:<0\|1\|2>` | Select app: 0=OOK48, 1=JT4, 2=PI4 (triggers reboot) |
-| `SET:msg:<0-9>:<text>` | Set TX message slot |
+| `SET:msg:<0-9>:<text>` | Set TX message slot (`<text>` is plain rendered message text) |
 | `CMD:tx` | Switch to transmit |
 | `CMD:rx` | Switch to receive |
 | `CMD:txmsg:<0-9>` | Select active TX message slot |
@@ -109,6 +175,18 @@ or
 python ook48_waterfall.py
 ```
 
+### Windows one-file release EXE
+
+Build a single-file GUI executable with:
+
+```powershell
+./scripts/build_gui_release.ps1
+```
+
+Output:
+
+- `dist/OOK48_GUI.exe`
+
 ### Features
 
 **Connection bar** — port selector, connect/disconnect, GPS time and locator
@@ -131,8 +209,10 @@ displayed live from `STA:` updates.
   - **Single click** on any slot button immediately transmits that slot
   - **■ STOP TX** halts transmission and returns to RX
 
-**TX message slots** — 10 slots are pre-filled by entering your callsign.
-The slot layout is designed for a complete contest QSO:
+**TX message slots** — 10 slots are template-driven and rendered live from your
+current operating fields.
+
+The default slot template set:
 
 | Slot | Content |
 |------|---------|
@@ -147,8 +227,11 @@ The slot layout is designed for a complete contest QSO:
 | 8 | `RGR 73` |
 | 9 | `{myCall}` |
 
-`{loc}` is substituted with the live GPS locator received from the firmware.
-All other substitutions happen in the GUI before the message is sent to the firmware.
+`{loc}` is substituted with live GPS locator data from `STA:`. Other substitutions are
+rendered in the GUI before sending each slot to firmware.
+
+Templates are user-editable in `ook48_config.json` (`messages[]`) and can be changed
+without touching code.
 
 **Settings tab** — all firmware parameters with Apply, Save, and Reboot buttons.
 
@@ -189,13 +272,26 @@ all firmware settings between sessions. Example:
   "halfrate": 0,
   "app": 0,
   "messages": [
-    "CQ G4EML",
-    "??? DE G4EML",
-    "??? 59001 {LOC}",
-    ...
+    "CQ {myCall}",
+    "{theirCall} DE {myCall}",
+    "{theirCall} 59{serial} {loc}",
+    "{theirCall} 59{serial}",
+    "{loc}",
+    "ALL AGN",
+    "LOC AGN",
+    "RPT AGN",
+    "RGR 73",
+    "{myCall}"
   ]
 }
 ```
+
+---
+
+## Credits
+
+- Colin Durbridge (G4EML) — original OOK48 work
+- Robin Szemeti (G1YFG) — RP2040_OOK48_Headless serial + GUI adaptation
 
 ---
 

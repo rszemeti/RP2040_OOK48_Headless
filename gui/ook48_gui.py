@@ -16,6 +16,7 @@ import json
 import os
 import time
 import queue
+import webbrowser
 from datetime import datetime
 import numpy as np
 from PIL import Image, ImageTk
@@ -34,22 +35,36 @@ DEFAULT_CONFIG = {
     "confidence": 0.180,
     "app": 0,
     "messages": [
-        "G4EML IO91\r",
-        "G4EML {LOC}\r",
-        "EMPTY\r",
-        "EMPTY\r",
-        "EMPTY\r",
-        "EMPTY\r",
-        "EMPTY\r",
-        "EMPTY\r",
-        "EMPTY\r",
-        "EMPTY\r",
+        "CQ {myCall}",
+        "{theirCall} DE {myCall}",
+        "{theirCall} 59{serial} {loc}",
+        "{theirCall} 59{serial}",
+        "{loc}",
+        "ALL AGN",
+        "LOC AGN",
+        "RPT AGN",
+        "RGR 73",
+        "{myCall}",
     ]
 }
 
 APP_NAMES = ["OOK48", "JT4G Decoder", "PI4 Decoder"]
+REPO_URL = "https://github.com/rszemeti/RP2040_OOK48_Headless"
 
 class OOK48GUI:
+    SLOT_LABELS = [
+        "CQ",
+        "Their call",
+        "Full exch",
+        "Exch no loc",
+        "Loc only",
+        "ALL AGN",
+        "LOC AGN",
+        "RPT AGN",
+        "RGR 73",
+        "My call",
+    ]
+
     def __init__(self, root):
         self.root = root
         self.root.title("OOK48 Serial Control + Waterfall")
@@ -60,6 +75,7 @@ class OOK48GUI:
         self.connected = False
         self.read_thread = None
         self.config = self.load_config()
+        self.qso_templates = self._templates_from_config()
         self.log_file = self._open_log_file()
         self.tx_mode = False
         self.current_loc = ""
@@ -68,6 +84,7 @@ class OOK48GUI:
         self.wf_height = 300    # number of history rows to keep
         self.wf_queue = queue.Queue()  # serial thread -> GUI thread
         self.wf_dirty = False  # tracks when a new message line starts
+        self.supports_rainscatter = True
 
         self.build_ui()
         self.refresh_ports()
@@ -81,10 +98,19 @@ class OOK48GUI:
             try:
                 with open(CONFIG_FILE) as f:
                     cfg = json.load(f)
+                changed = False
                 # Fill in any missing keys from defaults
                 for k, v in DEFAULT_CONFIG.items():
                     if k not in cfg:
                         cfg[k] = v
+                        changed = True
+                normalized_messages = self._normalize_message_templates(cfg.get("messages"))
+                if cfg.get("messages") != normalized_messages:
+                    cfg["messages"] = normalized_messages
+                    changed = True
+                if changed:
+                    with open(CONFIG_FILE, "w") as f:
+                        json.dump(cfg, f, indent=2)
                 return cfg
             except Exception:
                 pass
@@ -96,6 +122,33 @@ class OOK48GUI:
                 json.dump(self.config, f, indent=2)
         except Exception as e:
             self.log(f"[WARN] Could not save config: {e}")
+
+    def _default_message_templates(self):
+        return list(DEFAULT_CONFIG["messages"])
+
+    def _templates_from_config(self):
+        messages = self._normalize_message_templates(self.config.get("messages"))
+        self.config["messages"] = messages
+        return [
+            (slot, self.SLOT_LABELS[slot], messages[slot])
+            for slot in range(len(self.SLOT_LABELS))
+        ]
+
+    def _normalize_message_templates(self, messages):
+        defaults = self._default_message_templates()
+        if not isinstance(messages, list) or len(messages) != len(defaults):
+            return defaults
+
+        cleaned = [str(m).replace("\n", "").replace("\r", "") for m in messages]
+        if any((not text) or text.upper() == "EMPTY" for text in cleaned):
+            return defaults
+
+        template_tokens = ("{myCall}", "{theirCall}", "{serial}", "{loc}")
+        has_templates = any(any(tok in text for tok in template_tokens) for text in cleaned)
+        if not has_templates:
+            return defaults
+
+        return cleaned
 
     # ------------------------------------------------------------------
     # File logging
@@ -121,6 +174,8 @@ class OOK48GUI:
     # UI construction
     # ------------------------------------------------------------------
     def build_ui(self):
+        self.build_menu()
+
         # Top bar: connection controls
         conn_frame = ttk.LabelFrame(self.root, text="Connection", padding=5)
         conn_frame.pack(fill=tk.X, padx=5, pady=5)
@@ -172,6 +227,13 @@ class OOK48GUI:
         self.bottom_status = ttk.Label(status_bar, text="Ready", anchor=tk.W)
         self.bottom_status.pack(fill=tk.X, padx=5)
 
+    def build_menu(self):
+        menubar = tk.Menu(self.root)
+        about_menu = tk.Menu(menubar, tearoff=0)
+        about_menu.add_command(label="About OOK48…", command=self.show_about_dialog)
+        menubar.add_cascade(label="About", menu=about_menu)
+        self.root.config(menu=menubar)
+
     def build_main_tab(self, parent):
         # Horizontal paned window — left: RX decode, right: TX controls
         pane = tk.PanedWindow(parent, orient=tk.HORIZONTAL, sashrelief=tk.RAISED, sashwidth=5)
@@ -197,17 +259,14 @@ class OOK48GUI:
                     width=4, command=self.wf_rescale).pack(side=tk.LEFT, padx=(2,6))
         ttk.Button(wf_ctrl, text="Auto", command=self.wf_auto_scale).pack(side=tk.LEFT, padx=2)
         ttk.Button(wf_ctrl, text="Clear WF", command=self.wf_clear).pack(side=tk.LEFT, padx=2)
-        self.wf_info = ttk.Label(wf_ctrl, text="", foreground="grey")
-        self.wf_info.pack(side=tk.RIGHT, padx=4)
-
-        mode_row = ttk.Frame(wf_frame)
-        mode_row.pack(fill=tk.X, pady=(2, 0))
         self.decmode_main_btn = ttk.Button(
-            mode_row,
+            wf_ctrl,
             text="",
             command=self.on_main_decode_toggle,
         )
-        self.decmode_main_btn.pack(side=tk.LEFT, padx=2)
+        self.decmode_main_btn.pack(side=tk.LEFT, padx=(8, 2))
+        self.wf_info = ttk.Label(wf_ctrl, text="", foreground="grey")
+        self.wf_info.pack(side=tk.RIGHT, padx=4)
         self._sync_decode_mode_controls()
 
         self.wf_canvas = tk.Canvas(wf_frame, background="black", height=150)
@@ -257,7 +316,7 @@ class OOK48GUI:
         self.callsign_var = tk.StringVar(value=self.config.get("callsign", ""))
         my_call_entry = ttk.Entry(fields_frame, textvariable=self.callsign_var, width=10)
         my_call_entry.grid(row=0, column=1, sticky=tk.EW, pady=2, columnspan=2)
-        self.callsign_var.trace_add("write", lambda *_: self._upcase_var(self.callsign_var) or self.refresh_qso_buttons())
+        self.callsign_var.trace_add("write", self.on_callsign_change)
 
         ttk.Label(fields_frame, text="Their call:").grid(row=1, column=0, sticky=tk.W, padx=(0,4), pady=2)
         self.theircall_var = tk.StringVar()
@@ -554,6 +613,8 @@ class OOK48GUI:
             messagebox.showerror("Error", "Select a serial port first")
             return
         try:
+            self.supports_rainscatter = True
+            self._sync_decode_mode_controls()
             self.serial_port = serial.Serial(port, 115200, timeout=0.1)
             self.connected = True
             self.connect_btn.config(text="Disconnect")
@@ -652,8 +713,19 @@ class OOK48GUI:
             self.bottom_status.config(text=f"✓ {line}")
         elif line.startswith("ERR:"):
             self.last_decode_tag = None
+            reason = line[4:].strip().lower()
+            if "invalid decode mode" in reason:
+                self._handle_legacy_decode_mode()
             self.bottom_status.config(text=f"! {line}")
             self.log(f"[ERR] {line[4:]}", "err")
+
+    def _handle_legacy_decode_mode(self):
+        """Fallback for older firmware that does not support decode mode 2."""
+        self.supports_rainscatter = False
+        if int(self.config.get("decmode", 0)) != 0:
+            self.config["decmode"] = 0
+            self.save_config()
+        self._sync_decode_mode_controls()
 
     def update_remote_fw(self, payload):
         """Display firmware version from RDY payload."""
@@ -704,7 +776,12 @@ class OOK48GUI:
         self.log("[SYS] Pushing config to device…", "sys")
         self.send(f"SET:loclen:{self.config['loclen']}")
         time.sleep(0.05)
-        self.send(f"SET:decmode:{self.config['decmode']}")
+        decmode_to_send = 0 if (not self.supports_rainscatter and int(self.config.get("decmode", 0)) == 2) else int(self.config.get("decmode", 0))
+        if decmode_to_send != int(self.config.get("decmode", 0)):
+            self.config["decmode"] = 0
+            self._sync_decode_mode_controls()
+            self.save_config()
+        self.send(f"SET:decmode:{decmode_to_send}")
         time.sleep(0.05)
         self.send(f"SET:txadv:{self.config['txadv']}")
         time.sleep(0.05)
@@ -715,7 +792,7 @@ class OOK48GUI:
         self.send(f"SET:confidence:{self.config['confidence']:.3f}")
         time.sleep(0.05)
         for i, msg in enumerate(self.config["messages"]):
-            text = msg.replace("\r", "").replace("\n", "")
+            text = self._render_template(msg)
             self.send(f"SET:msg:{i}:{text}")
             time.sleep(0.05)
         self.log("[SYS] Config push complete", "sys")
@@ -762,15 +839,25 @@ class OOK48GUI:
     def _sync_decode_mode_controls(self):
         decmode = int(self.config.get("decmode", 0))
         if hasattr(self, "decmode_main_btn"):
-            if decmode == 2:
-                self.decmode_main_btn.config(text="Decode: Rainscatter (click for Normal)")
+            if not self.supports_rainscatter:
+                self.decmode_main_btn.config(text="Decode: Normal", state=tk.DISABLED)
+            elif decmode == 2:
+                self.decmode_main_btn.config(state=tk.NORMAL)
+                self.decmode_main_btn.config(text="Decode: Rainscatter")
             else:
-                self.decmode_main_btn.config(text="Decode: Normal (click for Rainscatter)")
+                self.decmode_main_btn.config(state=tk.NORMAL)
+                self.decmode_main_btn.config(text="Decode: Normal")
         if hasattr(self, "dm_combo"):
+            if not self.supports_rainscatter and decmode == 2:
+                self.config["decmode"] = 0
+                decmode = 0
             self.dm_combo.current(1 if decmode == 2 else 0)
 
     def on_main_decode_toggle(self):
         """Main-page quick toggle: Normal (0) <-> Rainscatter (2)."""
+        if not self.supports_rainscatter:
+            self.bottom_status.config(text="Decode mode: Normal (firmware does not support Rainscatter)")
+            return
         self.config["decmode"] = 0 if int(self.config.get("decmode", 0)) == 2 else 2
         self._sync_decode_mode_controls()
         if self.connected:
@@ -783,6 +870,34 @@ class OOK48GUI:
         self.apply_settings()
         self.save_config()
         messagebox.showinfo("Saved", f"Config saved to {CONFIG_FILE}")
+
+    def show_about_dialog(self):
+        win = tk.Toplevel(self.root)
+        win.title("About OOK48")
+        win.resizable(False, False)
+        win.transient(self.root)
+        win.grab_set()
+
+        frame = ttk.Frame(win, padding=12)
+        frame.pack(fill=tk.BOTH, expand=True)
+
+        ttk.Label(frame, text="OOK48 Serial Control GUI", font=("Segoe UI", 11, "bold")).pack(anchor=tk.W)
+        ttk.Label(frame, text="RP2040_OOK48_Headless", foreground="grey").pack(anchor=tk.W, pady=(0, 8))
+
+        ttk.Label(frame, text="Repository:").pack(anchor=tk.W)
+        repo_label = ttk.Label(frame, text=REPO_URL, foreground="blue", cursor="hand2")
+        repo_label.pack(anchor=tk.W, pady=(0, 8))
+        repo_label.bind("<Button-1>", lambda _e: webbrowser.open(REPO_URL))
+
+        ttk.Label(
+            frame,
+            text="Credits:\n"
+                 "• Colin Durbridge (G4EML) — original OOK48 work\n"
+                 "• Robin Szemeti (G1YFG) — RP2040_OOK48_Headless serial + GUI adaptation",
+            justify=tk.LEFT,
+        ).pack(anchor=tk.W)
+
+        ttk.Button(frame, text="Close", command=win.destroy).pack(anchor=tk.E, pady=(10, 0))
 
     def reboot_device(self):
         if self.connected:
@@ -800,6 +915,15 @@ class OOK48GUI:
         upper = val.upper()
         if val != upper:
             var.set(upper)
+
+    def on_callsign_change(self, *_):
+        """Persist callsign edits immediately and keep dependent UI in sync."""
+        self._upcase_var(self.callsign_var)
+        new_call = self.callsign_var.get().strip().upper()
+        self.refresh_qso_buttons()
+        if self.config.get("callsign", "") != new_call:
+            self.config["callsign"] = new_call
+            self.save_config()
 
     def send_freetext(self):
         """Push free-text entry as a one-shot message in slot 9 and transmit."""
@@ -845,7 +969,7 @@ class OOK48GUI:
         self.tx_slot_var.set(slot)
         # Find the rendered text for this slot
         rendered = ""
-        for s, label, tmpl in self.QSO_TEMPLATES:
+        for s, label, tmpl in self.qso_templates:
             if s == slot:
                 rendered = self._render_template(tmpl)
                 break
@@ -866,7 +990,7 @@ class OOK48GUI:
         if hasattr(self, "active_slot_label"):
             if slot is not None and self.tx_mode:
                 rendered = ""
-                for s, label, tmpl in self.QSO_TEMPLATES:
+                for s, label, tmpl in self.qso_templates:
                     if s == slot:
                         rendered = self._render_template(tmpl)
                         break
@@ -877,20 +1001,6 @@ class OOK48GUI:
     # ------------------------------------------------------------------
     # Contest QSO pad
     # ------------------------------------------------------------------
-
-    # Slot templates — {myCall}, {theirCall}, {serial}, {loc} are substituted live
-    QSO_TEMPLATES = [
-        (0, "CQ",          "CQ {myCall}"),
-        (1, "Their call",  "{theirCall} DE {myCall}"),
-        (2, "Full exch",   "{theirCall} 59{serial} {loc}"),
-        (3, "Exch no loc", "{theirCall} 59{serial}"),
-        (4, "Loc only",    "{loc}"),
-        (5, "ALL AGN",     "ALL AGN"),
-        (6, "LOC AGN",     "LOC AGN"),
-        (7, "RPT AGN",     "RPT AGN"),
-        (8, "RGR 73",      "RGR 73"),
-        (9, "My call",     "{myCall}"),
-    ]
 
     def _render_template(self, tmpl):
         """Substitute live QSO fields into a template string."""
@@ -909,7 +1019,7 @@ class OOK48GUI:
         for widget in self.qso_btn_frame.winfo_children():
             widget.destroy()
         self.qso_buttons = []
-        for slot, label, tmpl in self.QSO_TEMPLATES:
+        for slot, label, tmpl in self.qso_templates:
             rendered = self._render_template(tmpl)
             btn = ttk.Button(
                 self.qso_btn_frame,
@@ -925,10 +1035,9 @@ class OOK48GUI:
             return
         for btn, slot, tmpl in self.qso_buttons:
             btn.config(text=self._render_template(tmpl))
-        # Keep config messages in sync so firmware gets correct text
-        for slot, label, tmpl in self.QSO_TEMPLATES:
-            rendered = self._render_template(tmpl)
-            self.config["messages"][slot] = rendered + "\r"
+        # Keep config messages in sync as templates (not rendered text)
+        for slot, label, tmpl in self.qso_templates:
+            self.config["messages"][slot] = tmpl
 
     def increment_serial(self):
         self.serial_var.set(self.serial_var.get() + 1)
@@ -945,7 +1054,7 @@ class OOK48GUI:
         self.config["serial"] = self.serial_var.get()
         self.refresh_qso_buttons()
         if self.connected:
-            for slot, label, tmpl in self.QSO_TEMPLATES:
+            for slot, label, tmpl in self.qso_templates:
                 rendered = self._render_template(tmpl)
                 self.send(f"SET:msg:{slot}:{rendered}")
                 time.sleep(0.05)
@@ -1011,14 +1120,19 @@ class OOK48GUI:
         if char == "<CR>":
             self.last_decode_tag = None   # next char gets a fresh timestamp
             return
+        display_char = char
+        display_tag = tag
+        if char in ("<UNK>", "UNK", "~"):
+            display_char = "?"
+            display_tag = "err"
         if tag != self.last_decode_tag:
             ts = datetime.utcnow().strftime("%H:%M:%S")
             prefix = "RX" if tag == "rx" else "TX" if tag == "tx" else "  "
             self.decode_text.insert(tk.END, f"\n[{ts}z {prefix}] ", "sys")
             self._write_log(f"\n[{ts}z {prefix}] ")
             self.last_decode_tag = tag
-        self.decode_text.insert(tk.END, char, tag)
-        self._write_log(char)
+        self.decode_text.insert(tk.END, display_char, display_tag)
+        self._write_log(display_char)
         self.decode_text.see(tk.END)
 
     def log(self, msg, tag="sys"):
