@@ -1,12 +1,31 @@
 # PlatformIO build output
 arduino/.pio/
 
+# Local virtual environment
+.venv/
+
 # Python cache
 gui/__pycache__/
 **/__pycache__/
 *.pyc
 *.pyo
 
-# GUI config and log files (user-specific, not tracked)
-gui/*.json
+# Runtime logs and local configs
+ook48_*.log
+ook48_config.json
+gui/ook48_config.json
 gui/*.log
+
+# PyInstaller build artifacts
+build/
+dist/
+!dist/OOK48_GUI.exe
+*.spec
+assets/ook48.ico
+
+# Generated test artifacts (keep scripts/sources)
+Test Files/*.wav
+Test Files/*.png
+Test Files/*.log
+Test Files/ook48_config.json
+Test Files/rainscatter_tests/
