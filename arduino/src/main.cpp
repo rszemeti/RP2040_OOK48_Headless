@@ -22,7 +22,7 @@
 // Serial protocol
 // Firmware sends:
 //   RDY:<version>                              on boot, ready for config push
-//   STA:<hh>:<mm>:<ss>,<lat>,<lon>,<loc>,<tx>  status once per second
+//   STA:<hh>:<mm>:<ss>,<lat>,<lon>,<loc>,<tx>,<level>  status once per second  (level=RX audio 0-100)
 //   WF:<v0>,<v1>,...,<vN>                       waterfall line, 8-bit magnitudes per bin
 //   MRK:RED                                    mark waterfall at end of RX period
 //   MRK:CYN                                    mark waterfall at start of minute
@@ -30,23 +30,25 @@
 //   MRK:RX                                     TX ended, back to RX
 //   ERR:<char>                                 OOK48 decode error character
 //   TX:<char>                                  OOK48 transmitted character (use <CR> for carriage return)
-//   MSG:<char>                                 OOK48 decoded character (use <CR> for carriage return)
+//   SFT:<m0>,<m1>,...,<m7>                     soft magnitudes before decode (for GUI accumulator)
+//   MSG:<char>                                 OOK48 decoded character (use <CR> for carriage return, <UNK> for low-confidence)
 //   JT:<hh>:<mm>,<snr>,<message>               JT4 decoded message
 //   PI:<hh>:<mm>,<snr>,<message>               PI4 decoded message
 //   ACK:<command>  /  ERR:<reason>             command response
 //
 // Firmware accepts (newline terminated):
-//   SET:gpsbaud:<9600|38400>
 //   SET:loclen:<6|8|10>
 //   SET:decmode:<0|1>
 //   SET:txadv:<0-999>
 //   SET:rxret:<0-999>
 //   SET:halfrate:<0|1>
+//   SET:confidence:<value>          OOK48 confidence threshold, e.g. 0.180 (float)
 //   SET:app:<0|1|2>        0=OOK48 1=JT4 2=PI4  (causes reboot)
 //   SET:msg:<0-9>:<text>   set TX message slot
 //   CMD:tx                 switch to transmit
 //   CMD:rx                 switch to receive
 //   CMD:txmsg:<0-9>        select TX message slot
+//   CMD:ident              re-send RDY:<version> (useful when GUI connects to running device)
 //   CMD:clear              no-op, ack only
 //   CMD:reboot             reboot device
 // ---------------------------------------------------------------------------
@@ -192,7 +194,7 @@ void setup1()
 
     while (!core0Ready) delay(1);
 
-    Serial2.begin(settings.gpsBaud);
+    Serial2.begin(GPS_DEFAULT_BAUD);
 
     gpsPointer = 0;
     Serial.print("RDY:");
@@ -230,7 +232,9 @@ void loop1()
             break;
         case MESSAGE:
             Serial.print("MSG:");
-            Serial.println(decoded == '\r' ? "<CR>" : String(decoded));
+            if      (decoded == '\r')  Serial.println("<CR>");
+            else if (decoded == 0x7E)  Serial.println("<UNK>");
+            else                       Serial.println(String(decoded));
             break;
         case TMESSAGE:
             Serial.print("TX:");
@@ -247,6 +251,14 @@ void loop1()
         case PIMESSAGE:
             sprintf(m, "PI:%02d:%02d,%.0f,%s", gpsHr, gpsMin, sigNoise, PImessage);
             Serial.println(m);
+            break;
+        case SFTMESSAGE:
+            Serial.print("SFT:");
+            for (int i = 0; i < CACHESIZE; i++) {
+                if (i > 0) Serial.print(',');
+                Serial.print(sftMagnitudes[i], 1);
+            }
+            Serial.println();
             break;
         }
     }
@@ -298,20 +310,6 @@ void processSerial(void)
 
 void handleCommand(char *cmd)
 {
-    if (strncmp(cmd, "SET:gpsbaud:", 12) == 0)
-    {
-        int b = atoi(cmd + 12);
-        if (b == 9600 || b == 38400)
-        {
-            settings.gpsBaud = b;
-            Serial2.end();
-            Serial2.begin(settings.gpsBaud);
-            Serial.println("ACK:SET:gpsbaud");
-        }
-        else Serial.println("ERR:invalid baud rate");
-        return;
-    }
-
     if (strncmp(cmd, "SET:loclen:", 11) == 0)
     {
         int l = atoi(cmd + 11);
@@ -409,6 +407,18 @@ void handleCommand(char *cmd)
         return;
     }
 
+    if (strncmp(cmd, "SET:confidence:", 15) == 0)
+    {
+        float v = atof(cmd + 15);
+        if (v > 0.0f && v < 1.0f)
+        {
+            settings.confidenceThreshold = v;
+            Serial.println("ACK:SET:confidence");
+        }
+        else Serial.println("ERR:value out of range (0.0-1.0)");
+        return;
+    }
+
     if (strcmp(cmd, "CMD:tx") == 0)
     {
         if (settings.app == OOK48 && mode == RX)
@@ -463,6 +473,13 @@ void handleCommand(char *cmd)
         return;
     }
 
+    if (strcmp(cmd, "CMD:ident") == 0)
+    {
+        Serial.print("RDY:");
+        Serial.println(VERSION);
+        return;
+    }
+
     if (strcmp(cmd, "CMD:reboot") == 0)
     {
         Serial.println("ACK:CMD:reboot");
@@ -498,10 +515,10 @@ void sendStatus(void)
 {
     char s[64];
     if (PPSActive > 0 && gpsSec != -1)
-        sprintf(s, "STA:%02d:%02d:%02d,%.4f,%.4f,%s,%d",
-                gpsHr, gpsMin, gpsSec, latitude, longitude, qthLocator, (int)(mode == TX));
+        sprintf(s, "STA:%02d:%02d:%02d,%.4f,%.4f,%s,%d,%d",
+                gpsHr, gpsMin, gpsSec, latitude, longitude, qthLocator, (int)(mode == TX), (int)audioLevel);
     else
-        sprintf(s, "STA:--:--:--,0,0,----------,%d", (int)(mode == TX));
+        sprintf(s, "STA:--:--:--,0,0,----------,%d,%d", (int)(mode == TX), (int)audioLevel);
     Serial.println(s);
 }
 
@@ -510,14 +527,14 @@ void sendStatus(void)
 // ---------------------------------------------------------------------------
 void defaultSettings(void)
 {
-    settings.gpsBaud       = 9600;
-    settings.baudMagic     = 42;
+    settings.baudMagic          = 42;
     settings.locatorLength = 8;
     settings.decodeMode    = 0;
     settings.txAdvance     = 0;
     settings.rxRetard      = 0;
-    settings.app           = OOK48;
-    settings.calMagic      = 0;
+    settings.app                = OOK48;
+    settings.confidenceThreshold = CONFIDENCE_THRESHOLD;
+    settings.calMagic           = 0;
     for (int i = 0; i < 10; i++)
         strcpy(settings.TxMessage[i], "EMPTY\r");
     core0Ready = true;

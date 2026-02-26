@@ -32,7 +32,7 @@ void RxTick(void)
   uint8_t tn;
   static unsigned long lastDma;
 
-  if((millis() - lastDma) > 250) cachePoint = 0;                //if we have not had a DAm tranfer recently reset the pointer. (allows the spectrum to freerun with no GPS signal)
+  if((millis() - lastDma) > 250) cachePoint = 0;                //if we have not had a DMA transfer recently reset the pointer.
 
    if((dmaReady) && (cachePoint < cacheSize))                                                 //Do we have a complete buffer of ADC samples ready?
     {
@@ -86,7 +86,7 @@ int findBestBin(void)
   return topBin;
 }
 
-//search the magnitude cache to find the magnitude of the largest tone tone. 
+//search the magnitude cache to find the magnitude of the largest tone. 
 float findLargest(int timeslot)
 {
   float max;
@@ -99,64 +99,85 @@ float findLargest(int timeslot)
 }
 
 
-//Search the Tone Cache to try to decode the character. Pick the four largest magnitudes and set them to one. This will always result in a valid value.  
+// Search the Tone Cache to decode the character.
+// Sends SFT: soft magnitudes to GUI before hard decode.
+// Applies confidence gate — low confidence chars become UNK (0x7E).
 bool decodeCache(void)
 {
-  uint8_t dec;
+  uint8_t dec = 0;
   float largest;
   int bestbin;
   uint8_t largestbits[4];
-  float temp[CACHESIZE*2];         //temporary array for finding the largest magnitudes
+  float temp[CACHESIZE*2];         // working array — also used for half-rate sum
+  float sorted[CACHESIZE];         // copy for confidence sort
 
-
+  // Build temp[]: per-symbol max magnitude across tone bins
   if(settings.decodeMode == ALTMODE)
-   {
+  {
     bestbin = findBestBin(); 
-    for(int i =0; i< cacheSize; i++)
-     {
+    for(int i = 0; i < cacheSize; i++)
       temp[i] = toneCache[bestbin][i];
-     }
-   }
+  }
   else 
-   {
-      for(int i =0; i< cacheSize; i++)
-     {
+  {
+    for(int i = 0; i < cacheSize; i++)
       temp[i] = findLargest(i);
-     }
-   }
+  }
 
-  if(halfRate)                        //half rate decoding. Sum the two received chars into one. 
-   {
-    for(int i=0; i<CACHESIZE ; i++)
-      {
-        temp[i] = temp[i] + temp[i+8];
-      }
-   }
+  if(halfRate)                        // half rate: sum the two received chars into one
+  {
+    for(int i = 0; i < CACHESIZE; i++)
+      temp[i] = temp[i] + temp[i+8];
+  }
 
-  //find the four largest magnitudes and save their bit positions.
-  for(int l= 0; l < 4; l++)
+
+  // Copy soft magnitudes to global buffer and ask Core 1 to send SFT: line.
+  // Serial must only be used from Core 1 - FIFO is the safe cross-core channel.
+  // SFTMESSAGE is pushed before MESSAGE so SFT: arrives at GUI just before MSG:.
+  for(int i = 0; i < CACHESIZE; i++) sftMagnitudes[i] = temp[i];
+  rp2040.fifo.push(SFTMESSAGE);
+
+  // --- Confidence: gap between rank-4 and rank-5 normalised by full range ---
+  // Copy temp[] into sorted[], sort descending (8 elements, insertion sort)
+  for(int i = 0; i < CACHESIZE; i++) sorted[i] = temp[i];
+  for(int i = 1; i < CACHESIZE; i++)
+  {
+    float key = sorted[i];
+    int j = i - 1;
+    while(j >= 0 && sorted[j] < key) { sorted[j+1] = sorted[j]; j--; }
+    sorted[j+1] = key;
+  }
+  float range      = sorted[0] - sorted[7];
+  float confidence = (range > 0.0f) ? (sorted[3] - sorted[4]) / range : 0.0f;
+
+  // Find the four largest magnitudes and record their bit positions
+  for(int l = 0; l < 4; l++)
+  {
+    largest = 0;
+    for(int i = 0; i < CACHESIZE; i++)
     {
-      largest = 0;
-      for(int i = 0 ; i < CACHESIZE ; i++)
+      if(temp[i] > largest)
       {
-        if(temp[i] > largest)
-        {
-        largest=temp[i];
-        largestbits[l]=i;
-        }
+        largest = temp[i];
+        largestbits[l] = i;
       }
-      temp[largestbits[l]] = 0;
     }
+    temp[largestbits[l]] = 0;
+  }
 
-  //convert the 4 bit positions to a valid 4 from 8 char
-    for(int l = 0;l<4;l++)
-    {
-      dec = dec | (0x80 >> largestbits[l]);        //add a one bit. 
-    }
+  // Convert the 4 bit positions to a 4-from-8 byte
+  for(int l = 0; l < 4; l++)
+    dec = dec | (0x80 >> largestbits[l]);
 
-   decoded = decode4from8[dec];           //use the decode array to recover the original Character
-   return 1;
+  // --- Confidence gate ---
+  // Below threshold → UNK (0x7E, shown as '~' / <UNK> in GUI).
+  // Default 0.180 derived from empirical analysis; adjustable via SET:confidence: command.
+  if(confidence < settings.confidenceThreshold)
+  {
+    decoded = 0x7E;
+    return 1;
+  }
+
+  decoded = decode4from8[dec];
+  return 1;
 }
-
-
-

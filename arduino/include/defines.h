@@ -1,6 +1,6 @@
 #pragma once
 
-#define VERSION "Version 0.20"
+#define VERSION "Version 0.21"
 
 // GPIO Pin assignments
 #define GPSTXPin    4       // Serial data to GPS module
@@ -27,7 +27,9 @@
 #define OOKNUMBEROFBINS     68
 
 #define CACHESIZE           8           // 8 bits per character
+#define CONFIDENCE_THRESHOLD 0.180f     // below this → UNK decode (empirically derived) - default
 #define TXINTERVAL          111111      // 9 symbols/second in microseconds
+#define GPS_DEFAULT_BAUD    9600        // default GPS serial baud rate
 #define LOCTOKEN            0x86        // Placeholder token for locator substitution
 
 // JT4G detection parameters

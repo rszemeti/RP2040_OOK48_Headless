@@ -36,6 +36,7 @@ uint16_t cachePoint;
 bool     halfRate = false;
 
 char     decoded;
+float    sftMagnitudes[CACHESIZE];   // soft magnitudes copied here before SFTMESSAGE push
 
 char     gpsBuffer[256];
 int      gpsPointer;
@@ -63,6 +64,7 @@ float    magnitude[JT4NUMBEROFBINS];
 uint8_t  plotData[SPECWIDTH];
 bool     autolevel = true;
 uint16_t toneLegend[4][2];
+uint8_t  audioLevel = 0;     // RX audio level 0-100
 
 int      TxPointer = 0;
 uint8_t  TxBitPointer = 0;

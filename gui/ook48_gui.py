@@ -15,7 +15,6 @@ import threading
 import json
 import os
 import time
-import re
 import queue
 from datetime import datetime
 import numpy as np
@@ -27,12 +26,12 @@ DEFAULT_CONFIG = {
     "port": "",
     "callsign": "",
     "serial": 1,
-    "gpsbaud": 9600,
     "loclen": 8,
     "decmode": 0,
     "txadv": 0,
     "rxret": 0,
     "halfrate": 0,
+    "confidence": 0.180,
     "app": 0,
     "messages": [
         "G4EML IO91\r",
@@ -144,6 +143,14 @@ class OOK48GUI:
         self.loc_label.pack(side=tk.RIGHT, padx=5)
         self.remote_fw_label = ttk.Label(conn_frame, text="Remote FW: --", foreground="grey")
         self.remote_fw_label.pack(side=tk.RIGHT, padx=10)
+
+        # RX audio level meter
+        ttk.Label(conn_frame, text="RX Level:").pack(side=tk.RIGHT, padx=(10, 2))
+        self.level_label = ttk.Label(conn_frame, text="--", width=4, foreground="grey")
+        self.level_label.pack(side=tk.RIGHT)
+        self.level_bar = ttk.Progressbar(conn_frame, orient=tk.HORIZONTAL, length=80,
+                                         maximum=100, mode="determinate")
+        self.level_bar.pack(side=tk.RIGHT, padx=2)
 
         # Notebook for main areas
         nb = ttk.Notebook(self.root)
@@ -306,48 +313,50 @@ class OOK48GUI:
         app_combo.grid(row=0, column=1, sticky=tk.W, pady=3, padx=5)
         self.app_combo = app_combo
 
-        # GPS Baud
-        ttk.Label(sf, text="GPS Baud:").grid(row=1, column=0, sticky=tk.W, pady=3, padx=5)
-        self.gpsbaud_var = tk.IntVar(value=self.config["gpsbaud"])
-        gps_combo = ttk.Combobox(sf, textvariable=self.gpsbaud_var, values=[9600, 38400], state="readonly", width=10)
-        gps_combo.grid(row=1, column=1, sticky=tk.W, pady=3, padx=5)
-        self.gps_combo = gps_combo
-
         # Locator length
-        ttk.Label(sf, text="Locator length:").grid(row=2, column=0, sticky=tk.W, pady=3, padx=5)
+        ttk.Label(sf, text="Locator length:").grid(row=1, column=0, sticky=tk.W, pady=3, padx=5)
         self.loclen_var = tk.IntVar(value=self.config["loclen"])
         loc_combo = ttk.Combobox(sf, textvariable=self.loclen_var, values=[6, 8, 10], state="readonly", width=10)
-        loc_combo.grid(row=2, column=1, sticky=tk.W, pady=3, padx=5)
+        loc_combo.grid(row=1, column=1, sticky=tk.W, pady=3, padx=5)
 
         # Decode mode
-        ttk.Label(sf, text="Decode mode:").grid(row=3, column=0, sticky=tk.W, pady=3, padx=5)
+        ttk.Label(sf, text="Decode mode:").grid(row=2, column=0, sticky=tk.W, pady=3, padx=5)
         self.decmode_var = tk.IntVar(value=self.config["decmode"])
         dm_combo = ttk.Combobox(sf, textvariable=self.decmode_var, values=["Normal (0)", "Alt (1)"], state="readonly", width=12)
         dm_combo.current(self.config["decmode"])
-        dm_combo.grid(row=3, column=1, sticky=tk.W, pady=3, padx=5)
+        dm_combo.grid(row=2, column=1, sticky=tk.W, pady=3, padx=5)
         self.dm_combo = dm_combo
 
         # Half rate
-        ttk.Label(sf, text="Character period:").grid(row=4, column=0, sticky=tk.W, pady=3, padx=5)
+        ttk.Label(sf, text="Character period:").grid(row=3, column=0, sticky=tk.W, pady=3, padx=5)
         self.halfrate_var = tk.IntVar(value=self.config["halfrate"])
         hr_combo = ttk.Combobox(sf, textvariable=self.halfrate_var, values=["1s (normal)", "2s (half rate)"], state="readonly", width=16)
         hr_combo.current(self.config["halfrate"])
-        hr_combo.grid(row=4, column=1, sticky=tk.W, pady=3, padx=5)
+        hr_combo.grid(row=3, column=1, sticky=tk.W, pady=3, padx=5)
         self.hr_combo = hr_combo
 
         # TX advance
-        ttk.Label(sf, text="TX timing advance (ms):").grid(row=5, column=0, sticky=tk.W, pady=3, padx=5)
+        ttk.Label(sf, text="TX timing advance (ms):").grid(row=4, column=0, sticky=tk.W, pady=3, padx=5)
         self.txadv_var = tk.IntVar(value=self.config["txadv"])
-        ttk.Spinbox(sf, from_=0, to=999, textvariable=self.txadv_var, width=8).grid(row=5, column=1, sticky=tk.W, pady=3, padx=5)
+        ttk.Spinbox(sf, from_=0, to=999, textvariable=self.txadv_var, width=8).grid(row=4, column=1, sticky=tk.W, pady=3, padx=5)
 
         # RX retard
-        ttk.Label(sf, text="RX timing retard (ms):").grid(row=6, column=0, sticky=tk.W, pady=3, padx=5)
+        ttk.Label(sf, text="RX timing retard (ms):").grid(row=5, column=0, sticky=tk.W, pady=3, padx=5)
         self.rxret_var = tk.IntVar(value=self.config["rxret"])
-        ttk.Spinbox(sf, from_=0, to=999, textvariable=self.rxret_var, width=8).grid(row=6, column=1, sticky=tk.W, pady=3, padx=5)
+        ttk.Spinbox(sf, from_=0, to=999, textvariable=self.rxret_var, width=8).grid(row=5, column=1, sticky=tk.W, pady=3, padx=5)
+
+        # Confidence threshold
+        ttk.Label(sf, text="Confidence threshold:").grid(row=6, column=0, sticky=tk.W, pady=3, padx=5)
+        self.confidence_var = tk.DoubleVar(value=self.config.get("confidence", 0.180))
+        conf_spin = ttk.Spinbox(sf, from_=0.01, to=0.99, increment=0.01,
+                                textvariable=self.confidence_var, width=8, format="%.3f")
+        conf_spin.grid(row=6, column=1, sticky=tk.W, pady=3, padx=5)
+        ttk.Label(sf, text="(OOK48 UNK gate, default 0.180)",
+                  foreground="grey").grid(row=6, column=2, sticky=tk.W, pady=3, padx=5)
 
         # Buttons
         btn_frame = ttk.Frame(sf)
-        btn_frame.grid(row=7, column=0, columnspan=2, pady=15)
+        btn_frame.grid(row=7, column=0, columnspan=3, pady=15)
         ttk.Button(btn_frame, text="Apply Settings", command=self.apply_settings).pack(side=tk.LEFT, padx=5)
         ttk.Button(btn_frame, text="Save to File", command=self.save_config_ui).pack(side=tk.LEFT, padx=5)
         ttk.Button(btn_frame, text="Reboot Device", command=self.reboot_device).pack(side=tk.LEFT, padx=5)
@@ -532,7 +541,8 @@ class OOK48GUI:
             self.read_thread = threading.Thread(target=self.read_loop, daemon=True)
             self.read_thread.start()
             self.log("[SYS] Connected to " + port, "sys")
-            # Wait briefly for RDY: then push config
+            # Send ident immediately to get RDY: version response, then push config
+            self.root.after(200, lambda: self.send("CMD:ident"))
             self.root.after(1500, self.push_config)
         except Exception as e:
             messagebox.showerror("Connection Error", str(e))
@@ -558,6 +568,8 @@ class OOK48GUI:
         self.wf_dirty = False  # tracks when a new message line starts
         if hasattr(self, "remote_fw_label"):
             self.remote_fw_label.config(text="Remote FW: --", foreground="grey")
+        self.level_bar["value"] = 0
+        self.level_label.config(text="--", foreground="grey")
         self.update_tx_button()
         self.log("[SYS] Disconnected", "sys")
 
@@ -622,30 +634,10 @@ class OOK48GUI:
             self.log(f"[ERR] {line[4:]}", "err")
 
     def update_remote_fw(self, payload):
-        """Extract and display firmware version from RDY payload."""
+        """Display firmware version from RDY payload."""
         text = (payload or "").strip()
-        version = None
-        proto = None
-
-        m = re.search(r'(?i)\bfw\s*=\s*([^;\s,]+)', text)
-        if m:
-            version = m.group(1)
-        else:
-            m = re.search(r'(?i)\bfirmware\b\s*[:=]?\s*v?\s*([0-9A-Za-z._-]+)', text)
-            if m:
-                version = m.group(1)
-
-        m = re.search(r'(?i)\bproto\s*=\s*([^;\s,]+)', text)
-        if m:
-            proto = m.group(1)
-
-        if version:
-            if proto:
-                self.remote_fw_label.config(text=f"Remote FW: {version} (P{proto})", foreground="darkgreen")
-            else:
-                self.remote_fw_label.config(text=f"Remote FW: {version}", foreground="darkgreen")
-        elif text:
-            self.remote_fw_label.config(text=f"Remote FW: {text[:28]}", foreground="grey")
+        if text:
+            self.remote_fw_label.config(text=f"Remote FW: {text[:28]}", foreground="darkgreen")
         else:
             self.remote_fw_label.config(text="Remote FW: --", foreground="grey")
 
@@ -664,6 +656,21 @@ class OOK48GUI:
             if new_tx != self.tx_mode:
                 self.tx_mode = new_tx
                 self.update_tx_button()
+            if len(parts) > 5:
+                try:
+                    level = int(parts[5])
+                    self.level_bar["value"] = level
+                    if level < 5:
+                        color, text = "grey", f"{level}%"
+                    elif level > 90:
+                        color, text = "red", f"{level}%"
+                    elif level > 70:
+                        color, text = "orange", f"{level}%"
+                    else:
+                        color, text = "darkgreen", f"{level}%"
+                    self.level_label.config(text=text, foreground=color)
+                except ValueError:
+                    pass
 
     # ------------------------------------------------------------------
     # Config push to firmware
@@ -673,8 +680,6 @@ class OOK48GUI:
         if not self.connected:
             return
         self.log("[SYS] Pushing config to device…", "sys")
-        self.send(f"SET:gpsbaud:{self.config['gpsbaud']}")
-        time.sleep(0.05)
         self.send(f"SET:loclen:{self.config['loclen']}")
         time.sleep(0.05)
         self.send(f"SET:decmode:{self.config['decmode']}")
@@ -684,6 +689,8 @@ class OOK48GUI:
         self.send(f"SET:rxret:{self.config['rxret']}")
         time.sleep(0.05)
         self.send(f"SET:halfrate:{self.config['halfrate']}")
+        time.sleep(0.05)
+        self.send(f"SET:confidence:{self.config['confidence']:.3f}")
         time.sleep(0.05)
         for i, msg in enumerate(self.config["messages"]):
             text = msg.replace("\r", "").replace("\n", "")
@@ -703,21 +710,21 @@ class OOK48GUI:
     # ------------------------------------------------------------------
     def apply_settings(self):
         # Update config dict from UI
-        self.config["gpsbaud"] = int(self.gpsbaud_var.get())
         self.config["loclen"] = int(self.loclen_var.get())
         self.config["decmode"] = self.dm_combo.current()
         self.config["txadv"] = int(self.txadv_var.get())
         self.config["rxret"] = int(self.rxret_var.get())
         self.config["halfrate"] = self.hr_combo.current()
+        self.config["confidence"] = round(float(self.confidence_var.get()), 3)
         new_app = self.app_combo.current()
 
         if self.connected:
-            self.send(f"SET:gpsbaud:{self.config['gpsbaud']}")
             self.send(f"SET:loclen:{self.config['loclen']}")
             self.send(f"SET:decmode:{self.config['decmode']}")
             self.send(f"SET:txadv:{self.config['txadv']}")
             self.send(f"SET:rxret:{self.config['rxret']}")
             self.send(f"SET:halfrate:{self.config['halfrate']}")
+            self.send(f"SET:confidence:{self.config['confidence']:.3f}")
             if new_app != self.config["app"]:
                 if messagebox.askyesno("Change App", "Changing app requires a reboot. Continue?"):
                     self.config["app"] = new_app
