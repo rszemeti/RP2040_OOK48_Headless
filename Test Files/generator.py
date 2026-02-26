@@ -38,7 +38,7 @@ from scipy.signal import butter, sosfilt
 # +20dB = signal 20dB above noise (clean)
 #   0dB = signal equals noise (marginal)
 #  -3dB = signal below noise (should fail)
-SNR_DB = [20, 10, 6, 3, 0, -3, -6, -10]
+SNR_DB = [20, 10, 6, 3, 0, -3, -6, -10, -15, -16, -17, -18, -19, -20, -21, -22, -23, -24, -25]
 DEFAULT_BANDWIDTH  = 3500
 DEFAULT_TARGET_DBFS = -12
 
@@ -161,9 +161,9 @@ def mix_noise(input_file, bandwidth_hz, target_dbfs):
         else:
             noisy_tone = noisy_tone.astype(data.dtype)
 
-        # Reconstruct stereo file with click channel unchanged
+        # Reconstruct stereo file: click on ch0 (left), tone on ch1 (right)
         if click_ch is not None:
-            out_data = np.column_stack((noisy_tone, click_ch.astype(data.dtype)))
+            out_data = np.column_stack((click_ch.astype(data.dtype), noisy_tone))
         else:
             out_data = noisy_tone
 
