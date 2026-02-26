@@ -74,7 +74,7 @@ All messages are newline-terminated ASCII at 115200 baud.
 |---------|-------------|
 | `SET:gpsbaud:<9600\|38400>` | Set GPS baud rate |
 | `SET:loclen:<6\|8\|10>` | Set Maidenhead locator length |
-| `SET:decmode:<0\|1>` | Decode mode: 0=Normal, 1=Alt |
+| `SET:decmode:<0\|2>` | Decode mode: 0=Normal, 2=Rainscatter (wideband power) |
 | `SET:txadv:<0-999>` | TX timing advance in ms |
 | `SET:rxret:<0-999>` | RX timing retard in ms |
 | `SET:halfrate:<0\|1>` | 0=1s character period, 1=2s half-rate |

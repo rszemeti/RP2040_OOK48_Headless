@@ -29,7 +29,7 @@ extern bool core0Ready;
 // ---------------------------------------------------------------------------
 // Enumerations
 // ---------------------------------------------------------------------------
-enum DecodeModes  { NORMALMODE, ALTMODE };
+enum DecodeModes  { NORMALMODE, ALTMODE, RAINSCATTERMODE };
 enum Core1Message { GENPLOT, DRAWSPECTRUM, DRAWWATERFALL, REDLINE, CYANLINE,
                     MESSAGE, TMESSAGE, ERROR, JTMESSAGE, PIMESSAGE, SFTMESSAGE };
 enum Apps         { OOK48, BEACONJT4, BEACONPI4 };
