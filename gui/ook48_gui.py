@@ -15,12 +15,12 @@ import threading
 import json
 import os
 import time
-import random
-import math
+import re
 import queue
 from datetime import datetime
 import numpy as np
 from PIL import Image, ImageTk
+from ook48_accpanel import AccumulatorPanel
 
 CONFIG_FILE = "ook48_config.json"
 DEFAULT_CONFIG = {
@@ -142,6 +142,8 @@ class OOK48GUI:
         self.gps_label.pack(side=tk.RIGHT, padx=10)
         self.loc_label = ttk.Label(conn_frame, text="", foreground="grey")
         self.loc_label.pack(side=tk.RIGHT, padx=5)
+        self.remote_fw_label = ttk.Label(conn_frame, text="Remote FW: --", foreground="grey")
+        self.remote_fw_label.pack(side=tk.RIGHT, padx=10)
 
         # Notebook for main areas
         nb = ttk.Notebook(self.root)
@@ -188,9 +190,6 @@ class OOK48GUI:
                     width=4, command=self.wf_rescale).pack(side=tk.LEFT, padx=(2,6))
         ttk.Button(wf_ctrl, text="Auto", command=self.wf_auto_scale).pack(side=tk.LEFT, padx=2)
         ttk.Button(wf_ctrl, text="Clear WF", command=self.wf_clear).pack(side=tk.LEFT, padx=2)
-        self.fake_wf_running = False
-        self.fake_wf_btn = ttk.Button(wf_ctrl, text="▶ Fake WF", command=self.toggle_fake_wf)
-        self.fake_wf_btn.pack(side=tk.LEFT, padx=2)
         self.wf_info = ttk.Label(wf_ctrl, text="", foreground="grey")
         self.wf_info.pack(side=tk.RIGHT, padx=4)
 
@@ -200,6 +199,10 @@ class OOK48GUI:
         self.wf_canvas_image_id = None
         self.wf_rows = []
         self.wf_tk_image = None
+
+        # Accumulator panel (between waterfall and message log)
+        self.acc_panel = AccumulatorPanel(rx_frame, on_state_change=self.on_acc_state_change)
+        self.acc_panel.pack(fill=tk.X, pady=(4, 0))
 
         # Decoded messages
         decode_frame = ttk.LabelFrame(rx_frame, text="Decoded Messages", padding=2)
@@ -536,6 +539,8 @@ class OOK48GUI:
 
     def disconnect(self):
         self.connected = False
+        if hasattr(self, "acc_panel") and self.acc_panel:
+            self.acc_panel.reset()
         if self.serial_port:
             try:
                 self.serial_port.close()
@@ -551,6 +556,8 @@ class OOK48GUI:
         self.wf_height = 300    # number of history rows to keep
         self.wf_queue = queue.Queue()  # serial thread -> GUI thread
         self.wf_dirty = False  # tracks when a new message line starts
+        if hasattr(self, "remote_fw_label"):
+            self.remote_fw_label.config(text="Remote FW: --", foreground="grey")
         self.update_tx_button()
         self.log("[SYS] Disconnected", "sys")
 
@@ -575,6 +582,7 @@ class OOK48GUI:
     def handle_line(self, line):
         if line.startswith("RDY:"):
             self.last_decode_tag = None
+            self.update_remote_fw(line[4:])
             self.log(f"[SYS] Device ready: {line[4:]}", "sys")
         elif line.startswith("STA:"):
             self.update_status(line[4:])
@@ -596,6 +604,14 @@ class OOK48GUI:
             self.log(f"PI4  {line[3:]}", "pi")
         elif line.startswith("WF:"):
             self.wf_queue.put(line[3:])
+        elif line.startswith("SFT:"):
+            if hasattr(self, "acc_panel") and self.acc_panel:
+                try:
+                    mags = [float(x) for x in line[4:].split(",") if x]
+                    if mags:
+                        self.acc_panel.push(mags)
+                except ValueError:
+                    pass
         elif line.startswith("ACK:"):
 
             self.last_decode_tag = None
@@ -604,6 +620,34 @@ class OOK48GUI:
             self.last_decode_tag = None
             self.bottom_status.config(text=f"! {line}")
             self.log(f"[ERR] {line[4:]}", "err")
+
+    def update_remote_fw(self, payload):
+        """Extract and display firmware version from RDY payload."""
+        text = (payload or "").strip()
+        version = None
+        proto = None
+
+        m = re.search(r'(?i)\bfw\s*=\s*([^;\s,]+)', text)
+        if m:
+            version = m.group(1)
+        else:
+            m = re.search(r'(?i)\bfirmware\b\s*[:=]?\s*v?\s*([0-9A-Za-z._-]+)', text)
+            if m:
+                version = m.group(1)
+
+        m = re.search(r'(?i)\bproto\s*=\s*([^;\s,]+)', text)
+        if m:
+            proto = m.group(1)
+
+        if version:
+            if proto:
+                self.remote_fw_label.config(text=f"Remote FW: {version} (P{proto})", foreground="darkgreen")
+            else:
+                self.remote_fw_label.config(text=f"Remote FW: {version}", foreground="darkgreen")
+        elif text:
+            self.remote_fw_label.config(text=f"Remote FW: {text[:28]}", foreground="grey")
+        else:
+            self.remote_fw_label.config(text="Remote FW: --", foreground="grey")
 
     def update_status(self, payload):
         parts = payload.split(",")
@@ -879,35 +923,23 @@ class OOK48GUI:
             self.bottom_status.config(text=f"Their call set: {word.upper()}")
         return "break"   # prevent default word-selection behaviour
 
-    def _fake_wf_tick(self):
-        """Generate a fake waterfall row and schedule the next one."""
-        if not self.fake_wf_running:
-            return
-        bins = 64
-        t = time.time()
-        row = []
-        for i in range(bins):
-            # Noise floor
-            v = random.randint(10, 40)
-            # A couple of drifting signals
-            for centre, strength in [(20, 180), (45, 220), (10, 100)]:
-                dist = abs(i - (centre + 4 * math.sin(t * 0.3 + centre)))
-                if dist < 3:
-                    v = max(v, int(strength * max(0, 1 - dist / 3) + random.randint(-15, 15)))
-            row.append(max(0, min(255, v)))
-        self.handle_wf(",".join(str(x) for x in row))
-        self.root.after(111, self._fake_wf_tick)  # ~9 rows/sec
-
-    def toggle_fake_wf(self):
-        self.fake_wf_running = not getattr(self, "fake_wf_running", False)
-        self.fake_wf_btn.config(text="■ Stop fake WF" if self.fake_wf_running else "▶ Fake WF")
-        if self.fake_wf_running:
-            self._fake_wf_tick()
-
     def clear_decode(self):
         self.decode_text.delete("1.0", tk.END)
+        if hasattr(self, "acc_panel") and self.acc_panel:
+            self.acc_panel.reset()
         if self.connected:
             self.send("CMD:clear")
+
+    def on_acc_state_change(self, state_label, state):
+        """Mirror accumulator state changes to bottom status bar."""
+        if not hasattr(self, "bottom_status"):
+            return
+        msg_len = state.get("msg_len")
+        repeats = state.get("repeats", 0)
+        if msg_len:
+            self.bottom_status.config(text=f"ACC: {state_label}  L={msg_len}  x{repeats}")
+        else:
+            self.bottom_status.config(text=f"ACC: {state_label}")
 
     def save_log(self):
         content = self.decode_text.get("1.0", tk.END)

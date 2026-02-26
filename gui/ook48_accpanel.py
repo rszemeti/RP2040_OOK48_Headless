@@ -23,7 +23,7 @@ import tkinter as tk
 from tkinter import ttk
 import numpy as np
 import time
-from ook48_accumulator import OOK48Accumulator, CONFIDENCE_THRESHOLD, COPY_THRESHOLD
+from ook_accumulator import OOK48Accumulator, CONFIDENCE_THRESHOLD, COPY_THRESHOLD
 
 # ---------------------------------------------------------------------------
 # Colour scheme — dark terminal aesthetic to match radio software
@@ -34,6 +34,13 @@ BG_CELL_HL = '#3a3a3a'   # flipped/just-changed
 FG_LABEL   = '#888888'
 FG_COPY    = '#00ff88'
 FG_STATUS  = '#666666'
+
+STATE_STYLE = {
+    'SEARCHING': ('#444444', '#b0b0b0'),
+    'DETECTING': ('#6b4a00', '#ffaa33'),
+    'LOCKED': ('#1a5a1a', '#66ee66'),
+    'CONFIRMED': ('#0a3a0a', '#00ff88'),
+}
 
 # Confidence → background colour gradient
 def conf_colour(conf):
@@ -162,17 +169,22 @@ class AccumulatorPanel(tk.Frame):
     Call push(mags) for each SFT: line received.
     """
 
-    def __init__(self, parent, on_copy=None):
+    def __init__(self, parent, on_copy=None, on_state_change=None):
         super().__init__(parent, bg=BG_PANEL,
                          highlightthickness=1, highlightbackground='#333333')
 
         self._on_copy_cb = on_copy
+        self._on_state_change_cb = on_state_change
+        self._last_state_label = None
 
         # Header bar
         header = tk.Frame(self, bg=BG_PANEL)
         header.pack(fill=tk.X, padx=4, pady=(3, 0))
         tk.Label(header, text='ACCUMULATOR', font=('Courier', 8),
                  bg=BG_PANEL, fg='#555555').pack(side=tk.LEFT)
+        self._state_lbl = tk.Label(header, text='SEARCHING', font=('Courier', 8, 'bold'),
+                       bg='#444444', fg='#b0b0b0', padx=6, pady=1)
+        self._state_lbl.pack(side=tk.LEFT, padx=(8, 0))
         self._length_lbl = tk.Label(header, text='', font=('Courier', 8),
                                     bg=BG_PANEL, fg='#555555')
         self._length_lbl.pack(side=tk.RIGHT, padx=4)
@@ -214,15 +226,25 @@ class AccumulatorPanel(tk.Frame):
 
     def _on_update(self, state):
         """Called by master accumulator after every push."""
+        state_label = state.get('state_label', 'SEARCHING')
+        bg, fg = STATE_STYLE.get(state_label, ('#444444', '#b0b0b0'))
+        self._state_lbl.configure(text=state_label, bg=bg, fg=fg)
+        if state_label != self._last_state_label:
+            self._last_state_label = state_label
+            if self._on_state_change_cb:
+                self._on_state_change_cb(state_label, state)
+
         if not state['chars']:
-            self._length_lbl.configure(text='detecting…')
+            if state_label == 'SEARCHING':
+                self._length_lbl.configure(text='searching…')
+            else:
+                self._length_lbl.configure(text='detecting…')
             return
 
         L       = state['msg_len']
-        locked  = state['locked']
         repeats = state['repeats']
 
-        lock_sym = '✓' if locked else '?'
+        lock_sym = '✓' if state_label in ('LOCKED', 'CONFIRMED') else '?'
         self._length_lbl.configure(text=f'{lock_sym} L={L}  x{repeats}')
 
         # Build per-depth views from the depth accumulators
@@ -247,6 +269,10 @@ class AccumulatorPanel(tk.Frame):
             acc.reset()
         for row in self._rows.values():
             row.clear()
+        self._last_state_label = 'SEARCHING'
+        if self._on_state_change_cb:
+            self._on_state_change_cb('SEARCHING', self._master.get_display_state())
+        self._state_lbl.configure(text='SEARCHING', bg='#444444', fg='#b0b0b0')
         self._length_lbl.configure(text='')
 
 
