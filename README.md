@@ -154,6 +154,33 @@ All messages are newline-terminated ASCII at 115200 baud.
 
 ---
 
+## Firmware Releases (UF2)
+
+For RP2040/Pico targets, the easiest install format is **UF2** (not `avrdude`).
+
+This repo now includes a GitHub Actions workflow that builds firmware and publishes:
+
+- Workflow: `.github/workflows/firmware-release.yml`
+- Build target: `arduino/.pio/build/pico2/firmware.uf2`
+- Triggered on release publish (and manually via workflow dispatch)
+- UF2 is attached to the GitHub Release automatically
+
+### Easy Windows flashing
+
+Use the helper script to copy a UF2 to the board in BOOTSEL mode:
+
+```powershell
+./scripts/flash_firmware_uf2.ps1 -Uf2Path .\firmware.uf2
+```
+
+What it does:
+
+- waits for the `RPI-RP2` USB mass-storage drive
+- copies the UF2 to that drive
+- board reboots into the new firmware
+
+---
+
 ## Python GUI
 
 Two files are provided:
