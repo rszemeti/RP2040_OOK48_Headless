@@ -31,6 +31,7 @@ import os
 import re
 import sys
 import numpy as np
+import matplotlib.pyplot as plt
 from scipy.io import wavfile
 from scipy.signal import find_peaks, butter, sosfilt
 
@@ -39,7 +40,12 @@ GUI_DIR = os.path.abspath(os.path.join(HERE, "..", "gui"))
 if GUI_DIR not in sys.path:
     sys.path.insert(0, GUI_DIR)
 
-from ook_accumulator import OOK48Accumulator, _decode_mags
+from ook_accumulator import (
+    OOK48Accumulator,
+    _decode_mags,
+    DECODE_4FROM8,
+    CONFIDENCE_THRESHOLD,
+)
 
 SAMPLES_PER_SYM = 4900
 FFT_LEN = SAMPLES_PER_SYM
@@ -48,9 +54,10 @@ TONE_TOLERANCE = 3
 OOK_START_HZ = 495.0
 OOK_END_HZ = 1098.0
 DEFAULT_BANDWIDTH_HZ = 3500
-DEFAULT_POWER_STEPS_DB = [10, 6, 3, 2, 1]
+DEFAULT_POWER_STEPS_DB = [10, 6, 5, 4, 3, 2.5, 2, 1.5, 1]
 EXPECTED_MESSAGE = "OOK48 TEST\r"
 TARGET_DURATION_SEC = 120
+OUTPUT_ATTENUATION_DB = 10.0
 
 
 def rms(x):
@@ -223,6 +230,63 @@ def decode_text_at_depth(vectors, msg_len, depth):
     return "".join(out)
 
 
+def symbol_error_rate(decoded, expected):
+    if not decoded or not expected:
+        return 1.0
+    acc, _ = best_rotation_match(decoded, expected)
+    return 1.0 - acc
+
+
+def firmware_decode_mags(mags, confidence_threshold=CONFIDENCE_THRESHOLD):
+    vals = np.asarray(mags, dtype=np.float64).copy()
+    ranked = np.sort(vals)[::-1]
+    rng = ranked[0] - ranked[7]
+    confidence = (ranked[3] - ranked[4]) / rng if rng > 0 else 0.0
+    if confidence < confidence_threshold:
+        return '~'
+
+    bits = [0] * 8
+    work = vals.copy()
+    for _ in range(4):
+        idx = int(np.argmax(work))
+        bits[idx] = 1
+        work[idx] = 0.0
+
+    byte_val = 0
+    for b in bits:
+        byte_val = (byte_val << 1) | b
+    code = DECODE_4FROM8[byte_val] if byte_val < len(DECODE_4FROM8) else 0
+    return chr(code) if code > 0 else '?'
+
+
+def decode_text_at_depth_with(vectors, msg_len, depth, decoder):
+    if not vectors or not msg_len or msg_len <= 0:
+        return ""
+
+    need = depth * msg_len
+    if len(vectors) < need:
+        reps = int(np.ceil(need / len(vectors)))
+        seq = (vectors * reps)[:need]
+    else:
+        seq = vectors[:need]
+
+    accum = np.zeros((msg_len, 8), dtype=np.float64)
+    counts = np.zeros(msg_len, dtype=np.int32)
+    for i, mags in enumerate(seq):
+        pos = i % msg_len
+        accum[pos] += mags
+        counts[pos] += 1
+
+    out = []
+    for pos in range(msg_len):
+        if counts[pos] <= 0:
+            out.append('?')
+            continue
+        avg = accum[pos] / counts[pos]
+        out.append(decoder(avg))
+    return "".join(out)
+
+
 def _to_dtype_and_stereo(tone_out, click, src_dtype):
     if src_dtype == np.int16:
         tone_cast = np.clip(tone_out, -32768, 32767).astype(np.int16)
@@ -297,6 +361,8 @@ def make_noise_shift_files(input_file, out_dir, power_steps_db, bandwidth_hz, ta
 
     out_files = []
     baseline_rms = signal_rms if signal_rms > 0 else (0.01 * full_scale)
+    baseline_rms *= 10 ** (-OUTPUT_ATTENUATION_DB / 20.0)
+    print(f"Applying global attenuation: -{OUTPUT_ATTENUATION_DB:.1f} dB")
 
     for step_db in power_steps_db:
         low_noise = np.random.normal(0.0, 1.0, target_samples)
@@ -336,7 +402,8 @@ def make_noise_shift_files(input_file, out_dir, power_steps_db, bandwidth_hz, ta
                     hi_seg *= target_hi / hi_r
                 tone_out[start:end] = hi_seg
 
-        out_name = f"{base}_RS_PWR+{step_db}dB.wav"
+        step_label = str(step_db).replace('.', 'p')
+        out_name = f"{base}_RS_PWR+{step_label}dB.wav"
         out_path = os.path.join(out_dir, out_name)
         out_data = _to_dtype_and_stereo(tone_out, click_out, data.dtype)
         wavfile.write(out_path, sr, out_data)
@@ -380,21 +447,62 @@ def evaluate_file(path, expected):
         "tone": tone_res,
         "wide": wide_res,
         "wide_norm": wide_norm_res,
+        "wide_text_x1": decode_text_at_depth(wide_vectors, wide_res.get("msg_len"), 1),
         "wide_text_x2": decode_text_at_depth(wide_vectors, wide_res.get("msg_len"), 2),
         "wide_text_x4": decode_text_at_depth(wide_vectors, wide_res.get("msg_len"), 4),
         "wide_text_x8": decode_text_at_depth(wide_vectors, wide_res.get("msg_len"), 8),
+        "fw_wide_text_x8": decode_text_at_depth_with(
+            wide_vectors,
+            wide_res.get("msg_len"),
+            8,
+            firmware_decode_mags,
+        ),
     }
 
 
 def parse_power_step(name):
-    m = re.search(r"PWR\+([0-9]+)dB", name)
-    return int(m.group(1)) if m else -1
+    m = re.search(r"PWR\+([0-9]+(?:p[0-9]+)?)dB", name)
+    if not m:
+        return -1.0
+    return float(m.group(1).replace('p', '.'))
 
 
 def printable_text(s):
     if s is None:
         return ""
     return s.replace("\r", "<CR>").replace("\n", "<LF>")
+
+
+def save_ser_plot(results, output_png, expected_message):
+    steps = []
+    ser_x1 = []
+    ser_x2 = []
+    ser_x4 = []
+    ser_x8 = []
+
+    for r in results:
+        step = parse_power_step(r["file"])
+        steps.append(step)
+        ser_x1.append(100.0 * symbol_error_rate(r.get("wide_text_x1", ""), expected_message))
+        ser_x2.append(100.0 * symbol_error_rate(r.get("wide_text_x2", ""), expected_message))
+        ser_x4.append(100.0 * symbol_error_rate(r.get("wide_text_x4", ""), expected_message))
+        ser_x8.append(100.0 * symbol_error_rate(r.get("wide_text_x8", ""), expected_message))
+
+    fig, ax = plt.subplots(figsize=(9, 5))
+    ax.plot(steps, ser_x1, "o-", linewidth=2, label="x1")
+    ax.plot(steps, ser_x2, "s-", linewidth=2, label="x2")
+    ax.plot(steps, ser_x4, "^-", linewidth=2, label="x4")
+    ax.plot(steps, ser_x8, "D-", linewidth=2, label="x8")
+    ax.set_xlabel("Noise power increase (dB)")
+    ax.set_ylabel("Symbol error rate (%)")
+    ax.set_title("Rainscatter Wideband Decode Threshold")
+    ax.set_xticks(steps)
+    ax.set_ylim(0, 100)
+    ax.grid(True, alpha=0.3)
+    ax.legend()
+    plt.tight_layout()
+    plt.savefig(output_png, dpi=160)
+    plt.close(fig)
 
 
 def main():
@@ -428,7 +536,7 @@ def main():
         w = r["wide"]
         wn = r["wide_norm"]
         print(
-            f"+{step:>3d}dB "
+            f"+{step:>4.1f}dB "
             f"{str(t['msg_len']):>4} {str(w['msg_len']):>4} {str(wn['msg_len']):>5} "
             f"{100.0*t['match']:>5.1f}% {100.0*w['match']:>5.1f}% {100.0*wn['match']:>5.1f}% "
             f"{t['unk_pct']:>5.1f}% {w['unk_pct']:>5.1f}% {wn['unk_pct']:>5.1f}% "
@@ -439,6 +547,14 @@ def main():
             f"x4='{printable_text(r['wide_text_x4'])}'  "
             f"x8='{printable_text(r['wide_text_x8'])}'"
         )
+        fw_x8 = printable_text(r["fw_wide_text_x8"])
+        gui_x8 = printable_text(r["wide_text_x8"])
+        parity = "OK" if fw_x8 == gui_x8 else "DIFF"
+        print(f"         parity x8 firmware='{fw_x8}' gui='{gui_x8}' -> {parity}")
+
+    png_path = os.path.join(out_dir, "rainscatter_threshold_ser.png")
+    save_ser_plot(results, png_path, EXPECTED_MESSAGE)
+    print(f"\nSER threshold curve saved: {png_path}")
 
     print("\nDone. Use these WAVs for GUI/firmware spot checks:")
     for f in test_files:

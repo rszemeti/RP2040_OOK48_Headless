@@ -38,8 +38,10 @@ All commands are sent as one ASCII line plus trailing LF.
 ### `SET:decmode:<value>`
 - Values sent by GUI:
   - `0` = Normal (per-symbol max across tone search bins)
-  - `1` = Alt (single best bin tracked across symbol cache)
   - `2` = Rainscatter (per-symbol wideband power across full OOK band)
+- Firmware compatibility note:
+  - Firmware may also accept `1` for legacy Alt mode.
+  - Current GUI intentionally exposes only Normal and Rainscatter.
 
 ### `SET:txadv:<value>`
 - Integer milliseconds, GUI range `0..999`

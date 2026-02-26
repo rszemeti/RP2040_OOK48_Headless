@@ -200,6 +200,16 @@ class OOK48GUI:
         self.wf_info = ttk.Label(wf_ctrl, text="", foreground="grey")
         self.wf_info.pack(side=tk.RIGHT, padx=4)
 
+        mode_row = ttk.Frame(wf_frame)
+        mode_row.pack(fill=tk.X, pady=(2, 0))
+        self.decmode_main_var = tk.BooleanVar(value=(int(self.config.get("decmode", 0)) == 2))
+        ttk.Checkbutton(
+            mode_row,
+            text="Rainscatter decode",
+            variable=self.decmode_main_var,
+            command=self.on_main_decode_toggle,
+        ).pack(side=tk.LEFT, padx=2)
+
         self.wf_canvas = tk.Canvas(wf_frame, background="black", height=150)
         self.wf_canvas.pack(fill=tk.X)
         self.wf_canvas.bind("<Configure>", self._wf_on_resize)
@@ -325,15 +335,16 @@ class OOK48GUI:
         dm_combo = ttk.Combobox(
             sf,
             textvariable=self.decmode_var,
-            values=["Normal (0)", "Alt (1)", "Rainscatter (2)"],
+            values=["Normal (0)", "Rainscatter (2)"],
             state="readonly",
             width=18,
         )
-        dm_index = int(self.config.get("decmode", 0))
-        if dm_index < 0 or dm_index > 2:
-            dm_index = 0
+        decmode = int(self.config.get("decmode", 0))
+        if decmode == 2:
+            dm_combo.current(1)
+        else:
+            dm_combo.current(0)
             self.config["decmode"] = 0
-        dm_combo.current(dm_index)
         dm_combo.grid(row=2, column=1, sticky=tk.W, pady=3, padx=5)
         self.dm_combo = dm_combo
 
@@ -721,7 +732,8 @@ class OOK48GUI:
     def apply_settings(self):
         # Update config dict from UI
         self.config["loclen"] = int(self.loclen_var.get())
-        self.config["decmode"] = self.dm_combo.current()
+        self.config["decmode"] = 2 if self.dm_combo.current() == 1 else 0
+        self._sync_decode_mode_controls()
         self.config["txadv"] = int(self.txadv_var.get())
         self.config["rxret"] = int(self.rxret_var.get())
         self.config["halfrate"] = self.hr_combo.current()
@@ -743,6 +755,23 @@ class OOK48GUI:
             self.config["app"] = new_app
         self.save_config()
         self.bottom_status.config(text="Settings applied")
+
+    def _sync_decode_mode_controls(self):
+        decmode = int(self.config.get("decmode", 0))
+        if hasattr(self, "decmode_main_var"):
+            self.decmode_main_var.set(decmode == 2)
+        if hasattr(self, "dm_combo"):
+            self.dm_combo.current(1 if decmode == 2 else 0)
+
+    def on_main_decode_toggle(self):
+        """Main-page quick toggle: Normal (0) <-> Rainscatter (2)."""
+        self.config["decmode"] = 2 if self.decmode_main_var.get() else 0
+        self._sync_decode_mode_controls()
+        if self.connected:
+            self.send(f"SET:decmode:{self.config['decmode']}")
+            mode_name = "Rainscatter" if self.config["decmode"] == 2 else "Normal"
+            self.bottom_status.config(text=f"Decode mode: {mode_name}")
+        self.save_config()
 
     def save_config_ui(self):
         self.apply_settings()
