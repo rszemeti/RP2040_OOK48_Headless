@@ -38,7 +38,7 @@
 //
 // Firmware accepts (newline terminated):
 //   SET:loclen:<6|8|10>
-//   SET:decmode:<0|1>
+//   SET:decmode:<0|1|2>          0=normal peak-bin 1=alt best-bin 2=rainscatter wideband
 //   SET:txadv:<0-999>
 //   SET:rxret:<0-999>
 //   SET:halfrate:<0|1>
@@ -326,7 +326,7 @@ void handleCommand(char *cmd)
     if (strncmp(cmd, "SET:decmode:", 12) == 0)
     {
         int d = atoi(cmd + 12);
-        if (d == 0 || d == 1)
+        if (d >= 0 && d <= 2)
         {
             settings.decodeMode = d;
             Serial.println("ACK:SET:decmode");

@@ -36,7 +36,10 @@ All commands are sent as one ASCII line plus trailing LF.
 - Values sent by GUI: `6`, `8`, or `10`
 
 ### `SET:decmode:<value>`
-- Values sent by GUI: `0` or `1`
+- Values sent by GUI:
+  - `0` = Normal (per-symbol max across tone search bins)
+  - `1` = Alt (single best bin tracked across symbol cache)
+  - `2` = Rainscatter (per-symbol wideband power across full OOK band)
 
 ### `SET:txadv:<value>`
 - Integer milliseconds, GUI range `0..999`

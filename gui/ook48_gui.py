@@ -322,8 +322,18 @@ class OOK48GUI:
         # Decode mode
         ttk.Label(sf, text="Decode mode:").grid(row=2, column=0, sticky=tk.W, pady=3, padx=5)
         self.decmode_var = tk.IntVar(value=self.config["decmode"])
-        dm_combo = ttk.Combobox(sf, textvariable=self.decmode_var, values=["Normal (0)", "Alt (1)"], state="readonly", width=12)
-        dm_combo.current(self.config["decmode"])
+        dm_combo = ttk.Combobox(
+            sf,
+            textvariable=self.decmode_var,
+            values=["Normal (0)", "Alt (1)", "Rainscatter (2)"],
+            state="readonly",
+            width=18,
+        )
+        dm_index = int(self.config.get("decmode", 0))
+        if dm_index < 0 or dm_index > 2:
+            dm_index = 0
+            self.config["decmode"] = 0
+        dm_combo.current(dm_index)
         dm_combo.grid(row=2, column=1, sticky=tk.W, pady=3, padx=5)
         self.dm_combo = dm_combo
 

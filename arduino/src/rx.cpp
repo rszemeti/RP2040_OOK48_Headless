@@ -98,6 +98,16 @@ float findLargest(int timeslot)
   return max;
 }
 
+// Sum magnitude across all OOK bins for one symbol time slot.
+// Used by rainscatter mode where energy is spread across frequency.
+float findWidebandPower(int timeslot)
+{
+  float sum = 0.0f;
+  for(int b = 0; b < numberOfBins; b++)
+    sum += toneCache[b][timeslot];
+  return sum;
+}
+
 
 // Search the Tone Cache to decode the character.
 // Sends SFT: soft magnitudes to GUI before hard decode.
@@ -117,6 +127,11 @@ bool decodeCache(void)
     bestbin = findBestBin(); 
     for(int i = 0; i < cacheSize; i++)
       temp[i] = toneCache[bestbin][i];
+  }
+  else if(settings.decodeMode == RAINSCATTERMODE)
+  {
+    for(int i = 0; i < cacheSize; i++)
+      temp[i] = findWidebandPower(i);
   }
   else 
   {
