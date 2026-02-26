@@ -56,6 +56,13 @@ int fakeHr  = 10;
 int fakeMin = 0;
 int fakeSec = 0;
 
+// Fake RX message state
+const char* fakeRxMsgs[] = { "G4EML", "IO91WM", "OOK48", "TEST" };
+const char* fakeRxMsg     = nullptr;
+int         fakeRxIndex   = 0;
+unsigned long lastRxChar  = 0;
+bool        fakeRxActive  = false;
+
 unsigned long lastWF     = 0;
 unsigned long lastTxChar = 0;
 unsigned long lastStatus = 0;
@@ -81,7 +88,7 @@ void loop()
 
     if (txMode)
     {
-        // Echo TX characters at 9 baud
+        // Echo TX characters at ~1 char/second
         if (now - lastTxChar >= TX_INTERVAL_MS)
         {
             lastTxChar = now;
@@ -90,7 +97,7 @@ void loop()
     }
     else
     {
-        // Waterfall in RX mode
+        // Waterfall runs continuously in RX mode
         if (now - lastWF >= WF_INTERVAL_MS)
         {
             lastWF = now;
@@ -100,11 +107,18 @@ void loop()
                 peakDrift = -peakDrift;
         }
 
-        // Fake decoded messages
-        if (now - lastMsg >= MSG_INTERVAL_MS)
+        // Fake RX message - non-blocking, one char per tick
+        if (fakeRxActive && (now - lastRxChar >= TX_INTERVAL_MS))
+        {
+            lastRxChar = now;
+            tickFakeRxMessage();
+        }
+
+        // Start a new fake message periodically
+        if (!fakeRxActive && (now - lastMsg >= MSG_INTERVAL_MS))
         {
             lastMsg = now;
-            sendFakeMessage();
+            startFakeMessage();
         }
     }
 
@@ -149,6 +163,7 @@ void startTx()
     }
     txCharIndex = 0;
     lastTxChar  = millis() - TX_INTERVAL_MS;  // send first char immediately
+    Serial.println("MRK:TX");   // purple marker on waterfall
 }
 
 void sendTxChar()
@@ -188,18 +203,30 @@ void sendStatus()
 }
 
 // ---------------------------------------------------------------------------
-void sendFakeMessage()
+void startFakeMessage()
 {
-    const char* msgs[] = { "G4EML", "IO91WM", "OOK48", "TEST" };
-    const char* msg = msgs[random(0, 4)];
-    for (int i = 0; msg[i]; i++)
+    fakeRxMsg    = fakeRxMsgs[random(0, 4)];
+    fakeRxIndex  = 0;
+    fakeRxActive = true;
+    lastRxChar   = millis() - TX_INTERVAL_MS;  // first char immediately
+}
+
+void tickFakeRxMessage()
+{
+    if (!fakeRxMsg) { fakeRxActive = false; return; }
+
+    if (fakeRxMsg[fakeRxIndex])
     {
         Serial.print("MSG:");
-        Serial.println(msg[i]);
-        delay(999);   // ~1 char/second
+        Serial.println(fakeRxMsg[fakeRxIndex++]);
     }
-    // End of message CR
-    Serial.println("MSG:<CR>");
+    else
+    {
+        // End of text - send CR
+        Serial.println("MSG:<CR>");
+        fakeRxActive = false;
+        lastMsg = millis();   // reset interval for next message
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -271,6 +298,7 @@ void handleCommand(char* cmd)
     {
         txMode = false;
         txCharIndex = 0;
+        Serial.println("MRK:RX");   // mark end of TX on waterfall
         Serial.println("ACK:CMD:rx");
         return;
     }

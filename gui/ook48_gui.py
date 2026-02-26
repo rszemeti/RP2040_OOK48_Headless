@@ -236,13 +236,13 @@ class OOK48GUI:
         self.callsign_var = tk.StringVar(value=self.config.get("callsign", ""))
         my_call_entry = ttk.Entry(fields_frame, textvariable=self.callsign_var, width=10)
         my_call_entry.grid(row=0, column=1, sticky=tk.EW, pady=2, columnspan=2)
-        self.callsign_var.trace_add("write", lambda *_: self.refresh_qso_buttons())
+        self.callsign_var.trace_add("write", lambda *_: self._upcase_var(self.callsign_var) or self.refresh_qso_buttons())
 
         ttk.Label(fields_frame, text="Their call:").grid(row=1, column=0, sticky=tk.W, padx=(0,4), pady=2)
         self.theircall_var = tk.StringVar()
         their_entry = ttk.Entry(fields_frame, textvariable=self.theircall_var, width=10)
         their_entry.grid(row=1, column=1, sticky=tk.EW, pady=2)
-        self.theircall_var.trace_add("write", lambda *_: self.refresh_qso_buttons())
+        self.theircall_var.trace_add("write", lambda *_: self._upcase_var(self.theircall_var) or self.refresh_qso_buttons())
 
         ttk.Label(fields_frame, text="Serial #:").grid(row=2, column=0, sticky=tk.W, padx=(0,4), pady=2)
         self.serial_var = tk.IntVar(value=self.config.get("serial", 1))
@@ -262,6 +262,16 @@ class OOK48GUI:
         self._build_qso_buttons()
 
         ttk.Separator(tx_frame, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=6)
+
+        # -- Free text entry --
+        ft_frame = ttk.LabelFrame(tx_frame, text="Free text", padding=4)
+        ft_frame.pack(fill=tk.X, pady=(0,6))
+        self.freetext_var = tk.StringVar()
+        ft_entry = ttk.Entry(ft_frame, textvariable=self.freetext_var, font=("Courier", 10))
+        ft_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0,4))
+        ft_entry.bind("<KeyRelease>", lambda e: self._upcase_entry(self.freetext_var))
+        ft_entry.bind("<Return>", lambda e: self.send_freetext())
+        ttk.Button(ft_frame, text="Send", command=self.send_freetext).pack(side=tk.LEFT)
 
         self.stop_btn = ttk.Button(tx_frame, text="■  STOP TX", command=self.stop_tx)
         self.stop_btn.pack(fill=tk.X)
@@ -681,6 +691,35 @@ class OOK48GUI:
     def reboot_device(self):
         if self.connected:
             self.send("CMD:reboot")
+
+    def _upcase_var(self, var):
+        """Force a StringVar to uppercase without triggering a recursive trace."""
+        val = var.get()
+        upper = val.upper()
+        if val != upper:
+            var.set(upper)
+
+    def _upcase_entry(self, var):
+        val = var.get()
+        upper = val.upper()
+        if val != upper:
+            var.set(upper)
+
+    def send_freetext(self):
+        """Push free-text entry as a one-shot message in slot 9 and transmit."""
+        text = self.freetext_var.get().strip().upper()
+        if not text:
+            return
+        if not self.connected:
+            self.bottom_status.config(text="Not connected")
+            return
+        self.send(f"SET:msg:9:{text}")
+        time.sleep(0.05)
+        self.send("CMD:txmsg:9")
+        time.sleep(0.05)
+        self.send("CMD:tx")
+        self.active_slot_label.config(text=f"▶ [FT] {text}", foreground="red")
+        self.bottom_status.config(text=f"TX free text: {text}")
 
     def select_tx_slot(self):
         if self.connected:
