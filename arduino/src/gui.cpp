@@ -1,55 +1,42 @@
-#include <TFT_eSPI.h>
+// gui.cpp - LCD removed. generatePlotData() retained for WF: serial output.
+// calcLegend() retained as it sets toneLegend[] used by beacon init.
+#include <Arduino.h>
 #include "globals.h"
 #include "defines.h"
 #include "gui.h"
 
-extern TFT_eSPI tft;
-
-void clearSpectrum(void)
+// Generate the plot data array from FFT magnitudes with log scaling.
+// Results go into plotData[] and are sent as WF: lines via serial.
+void generatePlotData(void)
 {
-    tft.fillRect(SPECLEFT, SPECHEIGHT, SPECWIDTH, WATERHEIGHT + LEGHEIGHT, TFT_BLACK);
-    tft.fillRect(SPECLEFT, SPECTOP, SPECWIDTH, SPECHEIGHT, TFT_CYAN);
-}
+    float db[numberOfBins];
+    float vref = 2048.0;
+    static float baselevel;
 
-void drawWaterfall(void)
-{
-    if (mode == RX)
+    if (autolevel) baselevel = 0;
+
+    for (int p = 0; p < numberOfBins; p++)
     {
-        if (waterRow < WATERHEIGHT - 1)
-            tft.drawFastHLine(WATERLEFT, WATERTOP + waterRow + 1, WATERWIDTH, TFT_WHITE);
-        for (int p = 0; p < WATERWIDTH; p++)
-            tft.drawPixel(WATERLEFT + p, WATERTOP + waterRow, waterColours[(plotData[p] + 10) * 2]);
-        waterRow++;
-        if (waterRow >= WATERHEIGHT) waterRow = 0;
+        db[p] = 2 * (20 * (log10(magnitude[p] / vref)));
+        if (autolevel) baselevel += db[p];
     }
-}
 
-void markWaterfall(unsigned int col)
-{
-    if (mode == RX)
-        tft.drawFastHLine(WATERLEFT, WATERTOP + waterRow - 1, WATERWIDTH, col);
-}
+    if (autolevel) baselevel = baselevel / numberOfBins;
 
-void drawSpectrum(void)
-{
-    if (mode == RX)
+    for (int p = 0; p < numberOfBins; p++)
+        db[p] = uint8_t(db[p] - baselevel);
+
+    for (int x = 0; x < SPECWIDTH; x++)
     {
-        for (int p = 1; p < SPECWIDTH; p++)
-        {
-            tft.drawLine(SPECLEFT + p - 1, SPECTOP + SPECHEIGHT - lastplotData[p - 1],
-                         SPECLEFT + p,     SPECTOP + SPECHEIGHT - lastplotData[p], TFT_CYAN);
-            tft.drawLine(SPECLEFT + p - 1, SPECTOP + SPECHEIGHT - plotData[p - 1],
-                         SPECLEFT + p,     SPECTOP + SPECHEIGHT - plotData[p], TFT_RED);
-        }
-        memcpy(lastplotData, plotData, SPECWIDTH);
+        int strtBin = (long)x * numberOfBins / SPECWIDTH;
+        int endBin  = (long)(x + 1) * numberOfBins / SPECWIDTH - 1;
+        if (endBin >= numberOfBins) endBin = numberOfBins - 1;
+        if (endBin < 0) endBin = 0;
+        uint8_t maxVal = db[strtBin];
+        for (int i = strtBin + 1; i <= endBin; i++)
+            if (db[i] > maxVal) maxVal = db[i];
+        plotData[x] = maxVal;
     }
-}
-
-void drawLegend(void)
-{
-    tft.fillRect(LEGLEFT, LEGTOP, LEGWIDTH, LEGHEIGHT, TFT_WHITE);
-    for (int l = 0; l < numberOfTones; l++)
-        tft.fillRect(toneLegend[l][0], LEGTOP, 1 + toneLegend[l][1], LEGHEIGHT, TFT_ORANGE);
 }
 
 void calcLegend(void)
@@ -67,10 +54,4 @@ void calcLegend(void)
             toneLegend[t][1] = (toneTolerance * 2) * SPECWIDTH / numberOfBins;
         }
     }
-}
-
-void touch_calibrate_silent(void)
-{
-    if (settings.calMagic == 0x0A)
-        tft.setTouch(settings.calData);
 }

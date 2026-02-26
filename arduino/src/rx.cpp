@@ -1,5 +1,7 @@
+#include <Arduino.h>
 #include "globals.h"
 #include "defines.h"
+#include "dma.h"
 #include "rx.h"
 #include "fft.h"
 #include "gui.h"

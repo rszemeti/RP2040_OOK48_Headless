@@ -1,9 +1,13 @@
+#include <Arduino.h>
 #include "globals.h"
 #include "defines.h"
 #include "beacon.h"
 #include "fft.h"
 #include "gui.h"
 #include "fano.h"
+#include "dma.h"
+#include <cstring>
+#include <math.h>
 
 // This file contains the functions to decode the received JT4 symbols. 
 

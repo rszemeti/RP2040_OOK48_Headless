@@ -1,6 +1,11 @@
+#include <Arduino.h>
+#include <pico/time.h>
 #include "globals.h"
 #include "defines.h"
 #include "tx.h"
+
+extern struct repeating_timer TxIntervalTimer;
+void replaceToken(char *news, char *orig, char search, const char *rep);
 
 /* 
  * Sends an OOK48 encoded message.

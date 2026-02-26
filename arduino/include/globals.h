@@ -39,7 +39,7 @@ enum BModes       { JT4, PI4 };
 // ---------------------------------------------------------------------------
 // Global variables - defined in globals.cpp
 // ---------------------------------------------------------------------------
-extern uint     dma_chan;
+extern uint32_t     dma_chan;
 extern bool     dmaReady;
 extern uint8_t  bufIndex;
 
@@ -100,11 +100,9 @@ extern float    sampleI[NUMBEROFSAMPLES];
 extern float    magnitude[JT4NUMBEROFBINS];
 
 // Display
-extern uint16_t waterRow;
-extern bool     autolevel;
 extern uint8_t  plotData[SPECWIDTH];
-extern uint8_t  lastplotData[SPECWIDTH];
-extern uint8_t  toneLegend[4][2];
+extern bool     autolevel;
+extern uint16_t toneLegend[4][2];
 
 // TX
 extern int      TxPointer;
@@ -121,7 +119,6 @@ extern bool     messageChanging;
 // ---------------------------------------------------------------------------
 // Lookup tables - defined in globals.cpp
 // ---------------------------------------------------------------------------
-extern uint16_t waterColours[256];
 extern uint8_t  decode4from8[256];
 extern const uint8_t JT4syncVector[JT4SYMBOLCOUNT];
 extern const uint8_t PI4syncVector[PI4SYMBOLCOUNT];

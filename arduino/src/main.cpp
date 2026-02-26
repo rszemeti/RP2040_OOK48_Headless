@@ -8,15 +8,14 @@
 #include <hardware/dma.h>
 #include <hardware/adc.h>
 #include "hardware/irq.h"
+#include <pico/time.h>
 #include <arduinoFFT.h>
-#include <TFT_eSPI.h>
 #include "defines.h"
 #include "globals.h"
 #include "dma.h"
 #include "fft.h"
 #include "rx.h"
 #include "tx.h"
-#include "gui.h"
 #include "beacon.h"
 
 // ---------------------------------------------------------------------------
@@ -24,9 +23,14 @@
 // Firmware sends:
 //   RDY:<version>                              on boot, ready for config push
 //   STA:<hh>:<mm>:<ss>,<lat>,<lon>,<loc>,<tx>  status once per second
-//   MSG:<char>                                 OOK48 decoded character
+//   WF:<v0>,<v1>,...,<vN>                       waterfall line, 8-bit magnitudes per bin
+//   MRK:RED                                    mark waterfall at end of RX period
+//   MRK:CYN                                    mark waterfall at start of minute
+//   MRK:TX                                     TX started (draw purple line)
+//   MRK:RX                                     TX ended, back to RX
 //   ERR:<char>                                 OOK48 decode error character
-//   TX:<char>                                  OOK48 transmitted character echo
+//   TX:<char>                                  OOK48 transmitted character (use <CR> for carriage return)
+//   MSG:<char>                                 OOK48 decoded character (use <CR> for carriage return)
 //   JT:<hh>:<mm>,<snr>,<message>               JT4 decoded message
 //   PI:<hh>:<mm>,<snr>,<message>               PI4 decoded message
 //   ACK:<command>  /  ERR:<reason>             command response
@@ -48,7 +52,6 @@
 // ---------------------------------------------------------------------------
 
 // Shared objects - declared here, extern'd via headers in each module
-TFT_eSPI tft = TFT_eSPI();
 ArduinoFFT<float> FFT = ArduinoFFT<float>(sample, sampleI, NUMBEROFSAMPLES, SAMPLERATE);
 
 struct repeating_timer TxIntervalTimer;
@@ -59,6 +62,7 @@ struct repeating_timer PPSIntervalTimer;
 // ---------------------------------------------------------------------------
 void defaultSettings(void);
 void sendStatus(void);
+void sendWaterfall(void);
 void processSerial(void);
 void handleCommand(char *cmd);
 void processNMEA(void);
@@ -67,6 +71,10 @@ float convertToDecimalDegrees(float dddmm_mmm);
 void convertToMaid(void);
 void replaceToken(char *news, char *orig, char search, const char *rep);
 bool checksum(const char *sentence);
+void ppsISR(void);
+void doPPS(void);
+bool TxIntervalInterrupt(struct repeating_timer *t);
+bool PPSIntervalInterrupt(struct repeating_timer *t);
 
 // ---------------------------------------------------------------------------
 // Core 0 setup - time critical radio work
@@ -187,15 +195,6 @@ void setup1()
     Serial2.begin(settings.gpsBaud);
 
     gpsPointer = 0;
-    waterRow = 0;
-
-    tft.init();
-    tft.setRotation(1);
-    tft.fillScreen(TFT_BLACK);
-    touch_calibrate_silent();
-    clearSpectrum();
-    drawLegend();
-
     Serial.print("RDY:");
     Serial.println(VERSION);
 }
@@ -220,25 +219,22 @@ void loop1()
         case GENPLOT:
             generatePlotData();
             break;
-        case DRAWSPECTRUM:
-            drawSpectrum();
-            break;
         case DRAWWATERFALL:
-            drawWaterfall();
+            sendWaterfall();
             break;
         case REDLINE:
-            markWaterfall(TFT_RED);
+            Serial.println("MRK:RED");
             break;
         case CYANLINE:
-            markWaterfall(TFT_CYAN);
+            Serial.println("MRK:CYN");
             break;
         case MESSAGE:
             Serial.print("MSG:");
-            Serial.println(decoded);
+            Serial.println(decoded == '\r' ? "<CR>" : String(decoded));
             break;
         case TMESSAGE:
             Serial.print("TX:");
-            Serial.println(TxCharSent);
+            Serial.println(TxCharSent == '\r' ? "<CR>" : String(TxCharSent));
             break;
         case ERROR:
             Serial.print("ERR:");
@@ -422,11 +418,6 @@ void handleCommand(char *cmd)
             digitalWrite(TXPIN, 1);
             TxPointer = 0;
             TxBitPointer = 0;
-            tft.fillRect(SPECLEFT, SPECTOP, SPECWIDTH, SPECHEIGHT + WATERHEIGHT + LEGHEIGHT, TFT_RED);
-            tft.setTextColor(TFT_BLACK);
-            tft.setFreeFont(&FreeSansBold24pt7b);
-            tft.setTextDatum(TL_DATUM);
-            tft.drawString("TX", SPECLEFT + (SPECWIDTH) / 2 - 40, SPECTOP + SPECHEIGHT);
             Serial.println("ACK:CMD:tx");
         }
         else Serial.println("ERR:not in OOK48 RX mode");
@@ -441,9 +432,6 @@ void handleCommand(char *cmd)
             digitalWrite(KEYPIN, 0);
             digitalWrite(TXPIN, 0);
             cancel_repeating_timer(&TxIntervalTimer);
-            clearSpectrum();
-            drawLegend();
-            waterRow = 0;
             Serial.println("ACK:CMD:rx");
         }
         else Serial.println("ACK:CMD:rx - already RX");
@@ -485,6 +473,22 @@ void handleCommand(char *cmd)
 
     Serial.print("ERR:unknown command:");
     Serial.println(cmd);
+}
+
+// ---------------------------------------------------------------------------
+// Waterfall line - send plotData as WF:<v0>,<v1>,...,<vN>
+// plotData[] contains 8-bit magnitude values, one per display pixel/bin
+// ---------------------------------------------------------------------------
+void sendWaterfall(void)
+{
+    generatePlotData();
+    Serial.print("WF:");
+    for (int i = 0; i < SPECWIDTH; i++)
+    {
+        if (i > 0) Serial.print(',');
+        Serial.print(plotData[i]);
+    }
+    Serial.println();
 }
 
 // ---------------------------------------------------------------------------

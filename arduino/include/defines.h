@@ -10,21 +10,6 @@
 #define PPSINPUT    3       // 1PPS signal from GPS
 #define ADC_CHAN    2       // ADC2 on GPIO28 - audio input from receiver (DC biased to Vcc/2)
 
-// Spectrum display geometry (pixels)
-#define SPECLEFT    0
-#define SPECTOP     0
-#define SPECWIDTH   204
-#define SPECHEIGHT  100
-
-#define LEGLEFT     0
-#define LEGTOP      100
-#define LEGWIDTH    204
-#define LEGHEIGHT   10
-
-#define WATERLEFT   0
-#define WATERTOP    110
-#define WATERWIDTH  204
-#define WATERHEIGHT 165
 
 // OOK48 detection parameters
 // Spectrum: 495Hz to 1098Hz, tone at 800Hz
@@ -78,3 +63,5 @@
 #define PI4TONESPACING      39
 #define PI4TONETOLERANCE    12
 #define PI4NUMBEROFBINS     167
+
+#define SPECWIDTH           240

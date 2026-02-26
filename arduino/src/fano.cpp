@@ -10,7 +10,7 @@
  Copyright 1994, Phil Karn, KA9Q
  Minor modifications by Joe Taylor, K1JT
 */
-
+#include <Arduino.h>
 #define	LL 1	                // Select Layland-Lushbaugh code
 #include <stdio.h>
 #include <stdlib.h>
