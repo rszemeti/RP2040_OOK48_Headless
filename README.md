@@ -9,8 +9,6 @@ controls, decode display, message management, and logging move to the PC GUI.
 ## Quick Links
 
 - Latest release (download `.exe` / `.uf2`): https://github.com/rszemeti/RP2040_OOK48_Headless/releases/latest
-- All releases: https://github.com/rszemeti/RP2040_OOK48_Headless/releases
-- Firmware release workflow: https://github.com/rszemeti/RP2040_OOK48_Headless/blob/main/.github/workflows/firmware-release.yml
 
 ## GUI (Front and Center)
 
