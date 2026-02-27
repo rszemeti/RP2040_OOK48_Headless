@@ -85,6 +85,7 @@ class OOK48GUI:
         self.wf_queue = queue.Queue()  # serial thread -> GUI thread
         self.wf_dirty = False  # tracks when a new message line starts
         self.supports_rainscatter = True
+        self.config_push_in_progress = False
 
         self.build_ui()
         self.refresh_ports()
@@ -714,6 +715,9 @@ class OOK48GUI:
 
             self.last_decode_tag = None
             self.bottom_status.config(text=f"✓ {line}")
+            ack_cmd = line[4:].strip()
+            if self._should_log_ack(ack_cmd):
+                self.log(f"[ACK] {ack_cmd}", "sys")
         elif line.startswith("ERR:"):
             self.last_decode_tag = None
             reason = line[4:].strip().lower()
@@ -776,29 +780,43 @@ class OOK48GUI:
         """Send all settings to firmware after connect."""
         if not self.connected:
             return
+        self.config_push_in_progress = True
         self.log("[SYS] Pushing config to device…", "sys")
-        self.send(f"SET:loclen:{self.config['loclen']}")
-        time.sleep(0.05)
-        decmode_to_send = 0 if (not self.supports_rainscatter and int(self.config.get("decmode", 0)) == 2) else int(self.config.get("decmode", 0))
-        if decmode_to_send != int(self.config.get("decmode", 0)):
-            self.config["decmode"] = 0
-            self._sync_decode_mode_controls()
-            self.save_config()
-        self.send(f"SET:decmode:{decmode_to_send}")
-        time.sleep(0.05)
-        self.send(f"SET:txadv:{self.config['txadv']}")
-        time.sleep(0.05)
-        self.send(f"SET:rxret:{self.config['rxret']}")
-        time.sleep(0.05)
-        self.send(f"SET:halfrate:{self.config['halfrate']}")
-        time.sleep(0.05)
-        self.send(f"SET:confidence:{self.config['confidence']:.3f}")
-        time.sleep(0.05)
-        for i, msg in enumerate(self.config["messages"]):
-            text = self._render_template(msg)
-            self.send(f"SET:msg:{i}:{text}")
+        try:
+            self.send(f"SET:loclen:{self.config['loclen']}")
             time.sleep(0.05)
+            decmode_to_send = 0 if (not self.supports_rainscatter and int(self.config.get("decmode", 0)) == 2) else int(self.config.get("decmode", 0))
+            if decmode_to_send != int(self.config.get("decmode", 0)):
+                self.config["decmode"] = 0
+                self._sync_decode_mode_controls()
+                self.save_config()
+            self.send(f"SET:decmode:{decmode_to_send}")
+            time.sleep(0.05)
+            self.send(f"SET:txadv:{self.config['txadv']}")
+            time.sleep(0.05)
+            self.send(f"SET:rxret:{self.config['rxret']}")
+            time.sleep(0.05)
+            self.send(f"SET:halfrate:{self.config['halfrate']}")
+            time.sleep(0.05)
+            self.send(f"SET:confidence:{self.config['confidence']:.3f}")
+            time.sleep(0.05)
+            for i, msg in enumerate(self.config["messages"]):
+                text = self._render_template(msg)
+                self.send(f"SET:msg:{i}:{text}")
+                time.sleep(0.05)
+        finally:
+            self.config_push_in_progress = False
         self.log("[SYS] Config push complete", "sys")
+
+    def _should_log_ack(self, ack_cmd):
+        if not ack_cmd:
+            return False
+        lower = ack_cmd.lower()
+        if self.config_push_in_progress:
+            return False
+        if lower.startswith("set:"):
+            return False
+        return True
 
     def send(self, cmd):
         if self.connected and self.serial_port:
@@ -952,6 +970,7 @@ class OOK48GUI:
         self.send("CMD:dashes")
         self.active_slot_label.config(text="▶ [DASHES] ----------------", foreground="red")
         self.bottom_status.config(text="TX dashes: alignment mode")
+        self.log("[SYS] Dashes requested (CMD:dashes)", "sys")
 
     def select_tx_slot(self):
         if self.connected:
@@ -968,7 +987,12 @@ class OOK48GUI:
 
     def stop_tx(self):
         if self.connected:
+            was_dashes = hasattr(self, "active_slot_label") and "[DASHES]" in self.active_slot_label.cget("text")
             self.send("CMD:rx")
+            if was_dashes:
+                self.log("[SYS] Stop dashes requested (CMD:rx)", "sys")
+            else:
+                self.log("[SYS] TX stop requested (CMD:rx)", "sys")
 
     def toggle_tx(self):
         if self.tx_mode:
