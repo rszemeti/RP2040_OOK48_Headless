@@ -106,7 +106,7 @@ Firmware should emit one line per event with one of these prefixes.
 Recommended version payload (for firmware team):
 - Include semantic firmware version in `RDY:` as key/value text.
 - Preferred format:
-  - `RDY:fw=1.4.2;proto=1.0;board=RP2040`
+  - `RDY:fw=1.4.2;proto=1.0;board=RP2350/RP2040`
 - Minimum recommended key:
   - `fw=<semver>`
 - Backward compatibility:

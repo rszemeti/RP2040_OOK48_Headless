@@ -1,6 +1,6 @@
 # OOK48 Headless Serial + Desktop GUI
 
-A modified RP2040 OOK48 build where the touchscreen UI is replaced by a USB serial
+A modified RP2350/RP2040 OOK48 build where the touchscreen UI is replaced by a USB serial
 control path and a desktop Python GUI.
 
 The LCD remains active for spectrum/waterfall rendering, while all operating
@@ -91,7 +91,7 @@ paths.
 - All touchscreen UI — buttons, config pages, keyboard, memory pad
 
 ### Modified
-- `RP2040_OOK48_Serial.ino` — main file rewritten: serial protocol added,
+- `RP2040_OOK48_Serial.ino` — main file rewritten for RP2350/RP2040 targets: serial protocol added,
   `defaultSettings()` replaces EEPROM load/save, LCD init simplified
 - `globals.h` — SD, battery, and EEPROM-specific variables removed;
   `core0Ready` flag added for core synchronisation
@@ -106,7 +106,7 @@ paths.
 
 ## How It Works
 
-The RP2040 enumerates as a USB CDC serial device (virtual COM port) when connected
+The RP2350/RP2040 enumerates as a USB CDC serial device (virtual COM port) when connected
 to a laptop. The Python GUI connects to this port at 115200 baud.
 
 On boot the firmware applies safe defaults and sends `RDY:<version>`. The Python
@@ -117,51 +117,20 @@ as needed.
 The LCD shows the spectrum and waterfall continuously during RX, and a red TX
 indicator during transmit — exactly as before, just without anything else on screen.
 
----
-
-## Serial Protocol
-
-All messages are newline-terminated ASCII at 115200 baud.
-
-### Firmware → PC
-
-| Message | Description |
-|---------|-------------|
-| `RDY:<version>` | Boot complete, ready for config push |
-| `STA:<hh>:<mm>:<ss>,<lat>,<lon>,<locator>,<tx>` | Status line, once per second |
-| `MSG:<char>` | OOK48 decoded character (one per message) |
-| `ERR:<char>` | OOK48 decode error character |
-| `TX:<char>` | Transmitted character echo (one per transmitted character) |
-| `JT:<hh>:<mm>,<snr>,<message>` | JT4 decoded message |
-| `PI:<hh>:<mm>,<snr>,<message>` | PI4 decoded message |
-| `WF:<v0>,<v1>,...,<vN>` | Waterfall line — comma-separated 8-bit magnitudes, one per FFT bin |
-| `ACK:<command>` | Command acknowledged |
-| `ERR:<reason>` | Command rejected with reason |
-
-### PC → Firmware
-
-| Command | Description |
-|---------|-------------|
-| `SET:gpsbaud:<9600\|38400>` | Set GPS baud rate |
-| `SET:loclen:<6\|8\|10>` | Set Maidenhead locator length |
-| `SET:decmode:<0\|2>` | Decode mode: 0=Normal, 2=Rainscatter (wideband power) |
-| `SET:txadv:<0-999>` | TX timing advance in ms |
-| `SET:rxret:<0-999>` | RX timing retard in ms |
-| `SET:halfrate:<0\|1>` | 0=1s character period, 1=2s half-rate |
-| `SET:app:<0\|1\|2>` | Select app: 0=OOK48, 1=JT4, 2=PI4 (triggers reboot) |
-| `SET:msg:<0-9>:<text>` | Set TX message slot (`<text>` is plain rendered message text) |
-| `CMD:tx` | Switch to transmit |
-| `CMD:rx` | Switch to receive |
-| `CMD:txmsg:<0-9>` | Select active TX message slot |
-| `CMD:dashes` | Start continuous plain CW dash keying for alignment |
-| `CMD:clear` | No-op, returns ACK |
-| `CMD:reboot` | Reboot the device |
+Protocol details for firmware/GUI integration are in `gui/ook48_serial_protocol.md`
+and `Documents/ook48_serial_protocol.md`.
 
 ---
 
 ## Firmware Releases (UF2)
 
-For RP2040/Pico targets, the easiest install format is **UF2** (not `avrdude`).
+For RP2350/RP2040 Pico-class targets, the easiest install format is **UF2** (not `avrdude`).
+
+### RP2350 boards replacing RP2040
+
+New Pico-compatible boards are increasingly RP2350-based and are generally the default choice now.
+For this project, treat RP2350 as the modern replacement for RP2040: use the same UF2 workflow,
+and keep using RP2040 hardware where already deployed.
 
 ### Download latest release assets
 
@@ -169,14 +138,14 @@ For RP2040/Pico targets, the easiest install format is **UF2** (not `avrdude`).
   - https://github.com/rszemeti/RP2040_OOK48_Headless/releases/latest
 2. Open the newest release (top of the list).
 3. Under **Assets**, download:
-  - `*.uf2` (firmware for the RP2040 board)
+  - `*.uf2` (firmware for the RP2350/RP2040 board)
   - `OOK48_GUI.exe` (Windows desktop GUI)
 
 If Windows warns about SmartScreen, click **More info** → **Run anyway**.
 
-### Flash UF2 to RP2040 (BOOTSEL method)
+### Flash UF2 to RP2350/RP2040 (BOOTSEL method)
 
-1. Unplug the RP2040 board from USB.
+1. Unplug the RP2350/RP2040 board from USB.
 2. Press and hold the **BOOTSEL** button (some boards label this as **BOOT**).
 3. While still holding BOOTSEL, plug the USB cable into the PC.
 4. Release BOOTSEL after the board appears as a USB drive named **RPI-RP2**.
@@ -316,7 +285,7 @@ all firmware settings between sessions. Example:
 ## Credits
 
 - Colin Durbridge (G4EML) — original OOK48 work
-- Robin Szemeti (G1YFG) — RP2040_OOK48_Headless serial + GUI adaptation
+- Robin Szemeti (G1YFG) — RP2040_OOK48_Headless (RP2350/RP2040) serial + GUI adaptation
 
 ---
 
