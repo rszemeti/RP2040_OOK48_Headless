@@ -3,8 +3,7 @@
 A modified RP2350/RP2040 OOK48 build where the touchscreen UI is replaced by a USB serial
 control path and a desktop Python GUI.
 
-The LCD remains active for spectrum/waterfall rendering, while all operating
-controls, decode display, message management, and logging move to the PC GUI.
+All spectrum/waterfall rendering, operating controls, decode display, message management, and logging move to the PC GUI.
 
 ## Quick Links
 
