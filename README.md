@@ -158,22 +158,22 @@ If your board has a separate **RESET/RUN** button, you typically still need to h
 
 ### Windows 
 
-The easiest solution is to install our "one file" release.
+The easiest solution for running the GUI on Winows is to download our "one file" release.
 
 - `dist/OOK48_GUI.exe`
 
-To use a prebuilt GUI instead of building locally, download `OOK48_GUI.exe` from the latest GitHub Release assets (see **Download latest release assets** above).
+This is a prebuilt GUI instead of running all the Python stuff locally, just download `OOK48_GUI.exe` from the latest GitHub Release assets (see **Download latest release assets** above).
 
 ## Python GUI
 
-If you want to fiddle with the GUI and make chnages, running the rawPython version is for you.
+If you want to fiddle with the GUI and make changes, running the rawPython version is for you.
 
 - **`ook48_gui.py`** — standard GUI with waterfall
 
 
 ### Requirements
 ```
-pip install pyserial
+pip install -r gui/requirements.txt
 ```
 
 ### Running
