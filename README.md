@@ -149,6 +149,7 @@ All messages are newline-terminated ASCII at 115200 baud.
 | `CMD:tx` | Switch to transmit |
 | `CMD:rx` | Switch to receive |
 | `CMD:txmsg:<0-9>` | Select active TX message slot |
+| `CMD:dashes` | Start continuous plain CW dash keying for alignment |
 | `CMD:clear` | No-op, returns ACK |
 | `CMD:reboot` | Reboot the device |
 

@@ -353,6 +353,9 @@ class OOK48GUI:
         ft_entry.bind("<Return>", lambda e: self.send_freetext())
         ttk.Button(ft_frame, text="Send", command=self.send_freetext).pack(side=tk.LEFT)
 
+        self.dashes_btn = ttk.Button(tx_frame, text="Send Dashes", command=self.send_dashes)
+        self.dashes_btn.pack(fill=tk.X, pady=(0, 4))
+
         self.stop_btn = ttk.Button(tx_frame, text="■  STOP TX", command=self.stop_tx)
         self.stop_btn.pack(fill=tk.X)
 
@@ -940,6 +943,15 @@ class OOK48GUI:
         self.send("CMD:tx")
         self.active_slot_label.config(text=f"▶ [FT] {text}", foreground="red")
         self.bottom_status.config(text=f"TX free text: {text}")
+
+    def send_dashes(self):
+        """Start continuous dashes transmit mode for dish alignment."""
+        if not self.connected:
+            self.bottom_status.config(text="Not connected")
+            return
+        self.send("CMD:dashes")
+        self.active_slot_label.config(text="▶ [DASHES] ----------------", foreground="red")
+        self.bottom_status.config(text="TX dashes: alignment mode")
 
     def select_tx_slot(self):
         if self.connected:

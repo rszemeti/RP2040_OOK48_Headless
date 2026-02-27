@@ -48,6 +48,7 @@
 //   CMD:tx                 switch to transmit
 //   CMD:rx                 switch to receive
 //   CMD:txmsg:<0-9>        select TX message slot
+//   CMD:dashes             send continuous dashes for alignment
 //   CMD:ident              re-send RDY:<version> (useful when GUI connects to running device)
 //   CMD:clear              no-op, ack only
 //   CMD:reboot             reboot device
@@ -77,6 +78,12 @@ void ppsISR(void);
 void doPPS(void);
 bool TxIntervalInterrupt(struct repeating_timer *t);
 bool PPSIntervalInterrupt(struct repeating_timer *t);
+
+static volatile bool dashAlignmentMode = false;
+static volatile uint8_t dashUnitPhase = 0;
+static constexpr uint32_t DASH_UNIT_US = 100000;  // 100 ms time unit
+static constexpr uint8_t DASH_ON_UNITS = 3;       // dash length
+static constexpr uint8_t DASH_OFF_UNITS = 1;      // inter-element gap
 
 // ---------------------------------------------------------------------------
 // Core 0 setup - time critical radio work
@@ -117,6 +124,15 @@ void setup()
 
 bool TxIntervalInterrupt(struct repeating_timer *t)
 {
+    if (dashAlignmentMode)
+    {
+        Key = (dashUnitPhase < DASH_ON_UNITS);
+        dashUnitPhase++;
+        if (dashUnitPhase >= (DASH_ON_UNITS + DASH_OFF_UNITS))
+            dashUnitPhase = 0;
+        return true;
+    }
+
     TxSymbol();
     return true;
 }
@@ -138,6 +154,9 @@ void ppsISR(void)
     }
     else
     {
+        if (dashAlignmentMode)
+            return;
+
         if (settings.txAdvance == 0)
             doPPS();
         else
@@ -423,6 +442,8 @@ void handleCommand(char *cmd)
     {
         if (settings.app == OOK48 && mode == RX)
         {
+            dashAlignmentMode = false;
+            dashUnitPhase = 0;
             mode = TX;
             TxInit();
             digitalWrite(TXPIN, 1);
@@ -438,9 +459,12 @@ void handleCommand(char *cmd)
     {
         if (mode == TX)
         {
+            dashAlignmentMode = false;
+            dashUnitPhase = 0;
             mode = RX;
             digitalWrite(KEYPIN, 0);
             digitalWrite(TXPIN, 0);
+            Key = 0;
             cancel_repeating_timer(&TxIntervalTimer);
             Serial.println("ACK:CMD:rx");
         }
@@ -453,6 +477,8 @@ void handleCommand(char *cmd)
         int slot = atoi(cmd + 10);
         if (slot >= 0 && slot <= 9)
         {
+            dashAlignmentMode = false;
+            dashUnitPhase = 0;
             TxMessNo = slot;
             messageChanging = true;
             if (mode == TX)
@@ -464,6 +490,25 @@ void handleCommand(char *cmd)
             Serial.println("ACK:CMD:txmsg");
         }
         else Serial.println("ERR:invalid slot");
+        return;
+    }
+
+    if (strcmp(cmd, "CMD:dashes") == 0)
+    {
+        if (settings.app == OOK48)
+        {
+            messageChanging = true;
+            cancel_repeating_timer(&TxIntervalTimer);
+            dashAlignmentMode = true;
+            dashUnitPhase = 0;
+            mode = TX;
+            digitalWrite(TXPIN, 1);
+            add_repeating_timer_us(-DASH_UNIT_US, TxIntervalInterrupt, NULL, &TxIntervalTimer);
+            Key = 1;
+            messageChanging = false;
+            Serial.println("ACK:CMD:dashes");
+        }
+        else Serial.println("ERR:not in OOK48 mode");
         return;
     }
 

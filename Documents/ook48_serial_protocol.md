@@ -81,6 +81,9 @@ Notes:
 ### `CMD:rx`
 - Return to RX mode/stop transmit
 
+### `CMD:dashes`
+- Start continuous plain CW dash keying for antenna/dish alignment
+
 ### `CMD:clear`
 - Clear firmware-side decode/log state (if supported)
 

@@ -25,10 +25,33 @@ uint8_t encode4from8[70] = { 15, 23, 27, 29, 30, 39, 43, 45, 46, 51,
 
 void TxInit(void) 
 {
-  replaceToken(visualTxMessage+1,settings.TxMessage[TxMessNo],LOCTOKEN, qthLocator ); 
-  visualTxMessage[0]=13;
-  TxMessLen = encode(visualTxMessage,strlen(visualTxMessage) , TxBuffer);
-  TxPointer = 0;                   
+  char expanded[50];
+  replaceToken(expanded, settings.TxMessage[TxMessNo], LOCTOKEN, qthLocator);
+  TxLoadMessage(expanded);
+}
+
+void TxLoadMessage(const char* msg)
+{
+  const char* fallback = "----------------\r";
+  if (msg == nullptr || msg[0] == 0)
+  {
+    msg = fallback;
+  }
+
+  // Leave visualTxMessage[0] for leading CR marker, copy payload from [1]
+  strncpy(visualTxMessage + 1, msg, sizeof(visualTxMessage) - 2);
+  visualTxMessage[sizeof(visualTxMessage) - 1] = 0;
+  visualTxMessage[0] = 13;
+
+  int l = strlen(visualTxMessage);
+  if (l > 0 && visualTxMessage[l - 1] != '\r' && l < (int)sizeof(visualTxMessage) - 1)
+  {
+    visualTxMessage[l] = '\r';
+    visualTxMessage[l + 1] = 0;
+  }
+
+  TxMessLen = encode(visualTxMessage, strlen(visualTxMessage), TxBuffer);
+  TxPointer = 0;
   TxBitPointer = 0;
 }
 
