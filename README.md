@@ -6,6 +6,12 @@ control path and a desktop Python GUI.
 The LCD remains active for spectrum/waterfall rendering, while all operating
 controls, decode display, message management, and logging move to the PC GUI.
 
+## Quick Links
+
+- Latest release (download `.exe` / `.uf2`): https://github.com/rszemeti/RP2040_OOK48_Headless/releases/latest
+- All releases: https://github.com/rszemeti/RP2040_OOK48_Headless/releases
+- Firmware release workflow: https://github.com/rszemeti/RP2040_OOK48_Headless/blob/main/.github/workflows/firmware-release.yml
+
 ## GUI (Front and Center)
 
 ![OOK48 GUI](Documents/gui-main.png)
@@ -161,24 +167,37 @@ For RP2040/Pico targets, the easiest install format is **UF2** (not `avrdude`).
 
 This repo now includes a GitHub Actions workflow that builds firmware and publishes:
 
-- Workflow: `.github/workflows/firmware-release.yml`
+- Workflow: [firmware-release.yml](https://github.com/rszemeti/RP2040_OOK48_Headless/blob/main/.github/workflows/firmware-release.yml)
 - Build target: `arduino/.pio/build/pico2/firmware.uf2`
 - Triggered on release publish (and manually via workflow dispatch)
 - UF2 is attached to the GitHub Release automatically
 
-### Easy Windows flashing
+Direct links:
 
-Use the helper script to copy a UF2 to the board in BOOTSEL mode:
+- Releases: https://github.com/rszemeti/RP2040_OOK48_Headless/releases
+- Latest release: https://github.com/rszemeti/RP2040_OOK48_Headless/releases/latest
 
-```powershell
-./scripts/flash_firmware_uf2.ps1 -Uf2Path .\firmware.uf2
-```
+### Download latest release assets
 
-What it does:
+1. Open the project **Releases** page on GitHub:
+  - https://github.com/rszemeti/RP2040_OOK48_Headless/releases/latest
+2. Open the newest release (top of the list).
+3. Under **Assets**, download:
+  - `*.uf2` (firmware for the RP2040 board)
+  - `OOK48_GUI.exe` (Windows desktop GUI)
 
-- waits for the `RPI-RP2` USB mass-storage drive
-- copies the UF2 to that drive
-- board reboots into the new firmware
+If Windows warns about SmartScreen, click **More info** → **Run anyway**.
+
+### Flash UF2 to RP2040 (BOOTSEL method)
+
+1. Unplug the RP2040 board from USB.
+2. Press and hold the **BOOTSEL** button (some boards label this as **BOOT**).
+3. While still holding BOOTSEL, plug the USB cable into the PC.
+4. Release BOOTSEL after the board appears as a USB drive named **RPI-RP2**.
+5. Drag/copy the downloaded `*.uf2` file onto that **RPI-RP2** drive.
+6. Wait a few seconds; the drive disconnects automatically and the board reboots into the new firmware.
+
+If your board has a separate **RESET/RUN** button, you typically still need to hold **BOOTSEL** (not RESET) during plug-in to enter UF2 bootloader mode.
 
 ---
 
@@ -214,6 +233,8 @@ Build a single-file GUI executable with:
 Output:
 
 - `dist/OOK48_GUI.exe`
+
+To use a prebuilt GUI instead of building locally, download `OOK48_GUI.exe` from the latest GitHub Release assets (see **Download latest release assets** above).
 
 ### Features
 
