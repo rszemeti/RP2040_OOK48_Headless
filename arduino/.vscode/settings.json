@@ -1,5 +1,9 @@
 {
     "chat.tools.terminal.autoApprove": {
-        "C:\\Users\\robin\\.platformio\\penv\\Scripts\\platformio.exe": true
+        "C:\\Users\\robin\\.platformio\\penv\\Scripts\\platformio.exe": true,
+        "/^C:/Users/robin/AppData/Local/Programs/Python/Python311/python\\.exe -m platformio --version$/": {
+            "approve": true,
+            "matchCommandLine": true
+        }
     }
 }
