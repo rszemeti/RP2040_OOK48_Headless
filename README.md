@@ -165,18 +165,6 @@ All messages are newline-terminated ASCII at 115200 baud.
 
 For RP2040/Pico targets, the easiest install format is **UF2** (not `avrdude`).
 
-This repo now includes a GitHub Actions workflow that builds firmware and publishes:
-
-- Workflow: [firmware-release.yml](https://github.com/rszemeti/RP2040_OOK48_Headless/blob/main/.github/workflows/firmware-release.yml)
-- Build target: `arduino/.pio/build/pico2/firmware.uf2`
-- Triggered on release publish (and manually via workflow dispatch)
-- UF2 is attached to the GitHub Release automatically
-
-Direct links:
-
-- Releases: https://github.com/rszemeti/RP2040_OOK48_Headless/releases
-- Latest release: https://github.com/rszemeti/RP2040_OOK48_Headless/releases/latest
-
 ### Download latest release assets
 
 1. Open the project **Releases** page on GitHub:
@@ -201,12 +189,20 @@ If your board has a separate **RESET/RUN** button, you typically still need to h
 
 ---
 
+### Windows 
+
+The easiest solution is to install our "one file" release.
+
+- `dist/OOK48_GUI.exe`
+
+To use a prebuilt GUI instead of building locally, download `OOK48_GUI.exe` from the latest GitHub Release assets (see **Download latest release assets** above).
+
 ## Python GUI
 
-Two files are provided:
+If you want to fiddle with the GUI and make chnages, running the rawPython version is for you.
 
-- **`ook48_gui.py`** — standard GUI without waterfall
-- **`ook48_waterfall.py`** — adds a live waterfall display above the decode window
+- **`ook48_gui.py`** — standard GUI with waterfall
+
 
 ### Requirements
 ```
@@ -217,24 +213,6 @@ pip install pyserial
 ```
 python ook48_gui.py
 ```
-or
-```
-python ook48_waterfall.py
-```
-
-### Windows one-file release EXE
-
-Build a single-file GUI executable with:
-
-```powershell
-./scripts/build_gui_release.ps1
-```
-
-Output:
-
-- `dist/OOK48_GUI.exe`
-
-To use a prebuilt GUI instead of building locally, download `OOK48_GUI.exe` from the latest GitHub Release assets (see **Download latest release assets** above).
 
 ### Features
 
