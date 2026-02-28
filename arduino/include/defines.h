@@ -8,8 +8,7 @@
 #define TXPIN       6       // Transmit output pin
 #define KEYPIN      7       // Key output pin
 #define PPSINPUT    3       // 1PPS signal from GPS
-#define ADC_CHAN    2       // ADC2 on GPIO28 - audio input from receiver (DC biased to Vcc/2)
-
+#define ADC_CHAN    0       // ADC2 on GPIO28 - audio input from receiver (DC biased to Vcc/2)
 
 // OOK48 detection parameters
 // Spectrum: 495Hz to 1098Hz, tone at 800Hz
@@ -29,6 +28,9 @@
 #define CACHESIZE           8           // 8 bits per character
 #define CONFIDENCE_THRESHOLD 0.180f     // below this → UNK decode (empirically derived) - default
 #define TXINTERVAL          111111      // 9 symbols/second in microseconds
+#define MORSE_DEFAULT_WPM   12
+#define MORSE_MIN_WPM       5
+#define MORSE_MAX_WPM       40
 #define GPS_DEFAULT_BAUD    9600        // default GPS serial baud rate
 #define LOCTOKEN            0x86        // Placeholder token for locator substitution
 

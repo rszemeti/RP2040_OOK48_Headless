@@ -41,7 +41,7 @@ void generatePlotData(void)
 
 void calcLegend(void)
 {
-    if (settings.app == OOK48)
+    if (settings.app == OOK48 || settings.app == MORSEMODE)
     {
         toneLegend[0][0] = (rxTone - toneTolerance) * SPECWIDTH / numberOfBins;
         toneLegend[0][1] = (toneTolerance * 2) * SPECWIDTH / numberOfBins;

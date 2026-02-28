@@ -52,12 +52,16 @@ All commands are sent as one ASCII line plus trailing LF.
 ### `SET:halfrate:<value>`
 - Values sent by GUI: `0` (normal), `1` (half-rate)
 
+### `SET:morsewpm:<value>`
+- Integer Morse speed in words-per-minute, GUI range `5..40`
+
 ### `SET:app:<value>`
 - Integer app index
 - GUI app indices currently:
   - `0` = OOK48
   - `1` = JT4G Decoder
   - `2` = PI4 Decoder
+  - `3` = Morse
 
 ### `SET:msg:<slot>:<text>`
 - `slot`: currently `0..9`
@@ -85,6 +89,9 @@ Notes:
 
 ### `CMD:dashes`
 - Start continuous plain CW dash keying for antenna/dish alignment
+
+### `CMD:morsetx:<text>`
+- Transmit one-shot Morse from `<text>` and return to RX when complete
 
 ### `CMD:clear`
 - Clear firmware-side decode/log state (if supported)
@@ -221,6 +228,9 @@ Normative recommendation:
 
 Example:
 - `RDY:fw=1.4.2;proto=1.0;git=a1b2c3d;build=2026-02-26T18:20:00Z`
+
+Current firmware may also include Morse speed metadata:
+- `RDY:fw=Version 0.25;morsewpm=12`
 
 Compatibility note:
 - Existing GUI requires no parser change because it logs all `RDY:` payload text verbatim.

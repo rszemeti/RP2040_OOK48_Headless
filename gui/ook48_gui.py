@@ -32,6 +32,7 @@ DEFAULT_CONFIG = {
     "txadv": 0,
     "rxret": 0,
     "halfrate": 0,
+    "morsewpm": 12,
     "confidence": 0.180,
     "app": 0,
     "messages": [
@@ -48,7 +49,7 @@ DEFAULT_CONFIG = {
     ]
 }
 
-APP_NAMES = ["OOK48", "JT4G Decoder", "PI4 Decoder"]
+APP_NAMES = ["OOK48", "JT4G Decoder", "PI4 Decoder", "Morse"]
 REPO_URL = "https://github.com/rszemeti/RP2040_OOK48_Headless"
 
 class OOK48GUI:
@@ -197,6 +198,8 @@ class OOK48GUI:
         self.gps_label.pack(side=tk.RIGHT, padx=10)
         self.loc_label = ttk.Label(conn_frame, text="", foreground="grey")
         self.loc_label.pack(side=tk.RIGHT, padx=5)
+        self.remote_morse_label = ttk.Label(conn_frame, text="Morse WPM: --", foreground="grey")
+        self.remote_morse_label.pack(side=tk.RIGHT, padx=10)
         self.remote_fw_label = ttk.Label(conn_frame, text="Remote FW: --", foreground="grey")
         self.remote_fw_label.pack(side=tk.RIGHT, padx=10)
 
@@ -283,15 +286,15 @@ class OOK48GUI:
         self.acc_panel.set_confidence_threshold(self.config.get("confidence", 0.180))
 
         # Decoded messages
-        decode_frame = ttk.LabelFrame(rx_frame, text="Decoded Messages", padding=2)
-        decode_frame.pack(fill=tk.BOTH, expand=True, pady=(4,0))
+        self.decode_frame = ttk.LabelFrame(rx_frame, text="Decoded Messages", padding=2)
+        self.decode_frame.pack(fill=tk.BOTH, expand=True, pady=(4,0))
 
-        btn_row = ttk.Frame(decode_frame)
+        btn_row = ttk.Frame(self.decode_frame)
         btn_row.pack(fill=tk.X)
         ttk.Button(btn_row, text="Clear", command=self.clear_decode).pack(side=tk.LEFT)
         ttk.Button(btn_row, text="Save Log…", command=self.save_log).pack(side=tk.LEFT, padx=5)
 
-        self.decode_text = scrolledtext.ScrolledText(decode_frame, font=("Courier", 11))
+        self.decode_text = scrolledtext.ScrolledText(self.decode_frame, font=("Courier", 11))
         self.decode_text.pack(fill=tk.BOTH, expand=True, pady=3)
         self.decode_text.tag_config("rx", foreground="green")
         self.decode_text.tag_config("tx", foreground="red")
@@ -384,6 +387,7 @@ class OOK48GUI:
         self.app_var = tk.IntVar(value=self.config["app"])
         app_combo = ttk.Combobox(sf, textvariable=self.app_var, values=APP_NAMES, state="readonly", width=18)
         app_combo.current(self.config["app"])
+        app_combo.bind("<<ComboboxSelected>>", lambda _e: self._sync_app_dependent_ui())
         app_combo.grid(row=0, column=1, sticky=tk.W, pady=3, padx=5)
         self.app_combo = app_combo
 
@@ -431,20 +435,28 @@ class OOK48GUI:
         ttk.Spinbox(sf, from_=0, to=999, textvariable=self.rxret_var, width=8).grid(row=5, column=1, sticky=tk.W, pady=3, padx=5)
 
         # Confidence threshold
-        ttk.Label(sf, text="Confidence threshold:").grid(row=6, column=0, sticky=tk.W, pady=3, padx=5)
+        self.confidence_label = ttk.Label(sf, text="Confidence threshold:")
+        self.confidence_label.grid(row=6, column=0, sticky=tk.W, pady=3, padx=5)
         self.confidence_var = tk.DoubleVar(value=self.config.get("confidence", 0.180))
-        conf_spin = ttk.Spinbox(sf, from_=0.01, to=0.99, increment=0.01,
-                                textvariable=self.confidence_var, width=8, format="%.3f")
-        conf_spin.grid(row=6, column=1, sticky=tk.W, pady=3, padx=5)
-        ttk.Label(sf, text="(OOK48 UNK gate, default 0.180)",
-                  foreground="grey").grid(row=6, column=2, sticky=tk.W, pady=3, padx=5)
+        self.conf_spin = ttk.Spinbox(sf, from_=0.01, to=0.99, increment=0.01,
+                         textvariable=self.confidence_var, width=8, format="%.3f")
+        self.conf_spin.grid(row=6, column=1, sticky=tk.W, pady=3, padx=5)
+        self.conf_hint_label = ttk.Label(sf, text="(OOK48 UNK gate, default 0.180)", foreground="grey")
+        self.conf_hint_label.grid(row=6, column=2, sticky=tk.W, pady=3, padx=5)
+
+        # Morse speed
+        ttk.Label(sf, text="Morse WPM:").grid(row=7, column=0, sticky=tk.W, pady=3, padx=5)
+        self.morsewpm_var = tk.IntVar(value=int(self.config.get("morsewpm", 12)))
+        ttk.Spinbox(sf, from_=5, to=40, textvariable=self.morsewpm_var, width=8).grid(row=7, column=1, sticky=tk.W, pady=3, padx=5)
 
         # Buttons
         btn_frame = ttk.Frame(sf)
-        btn_frame.grid(row=7, column=0, columnspan=3, pady=15)
+        btn_frame.grid(row=8, column=0, columnspan=3, pady=15)
         ttk.Button(btn_frame, text="Apply Settings", command=self.apply_settings).pack(side=tk.LEFT, padx=5)
         ttk.Button(btn_frame, text="Save to File", command=self.save_config_ui).pack(side=tk.LEFT, padx=5)
         ttk.Button(btn_frame, text="Reboot Device", command=self.reboot_device).pack(side=tk.LEFT, padx=5)
+
+        self._sync_app_dependent_ui()
 
     # ------------------------------------------------------------------
     # Waterfall tab
@@ -655,6 +667,8 @@ class OOK48GUI:
         self.wf_dirty = False  # tracks when a new message line starts
         if hasattr(self, "remote_fw_label"):
             self.remote_fw_label.config(text="Remote FW: --", foreground="grey")
+        if hasattr(self, "remote_morse_label"):
+            self.remote_morse_label.config(text="Morse WPM: --", foreground="grey")
         self.level_bar["value"] = 0
         self.level_label.config(text="--", foreground="grey")
         self.update_tx_button()
@@ -737,10 +751,32 @@ class OOK48GUI:
     def update_remote_fw(self, payload):
         """Display firmware version from RDY payload."""
         text = (payload or "").strip()
-        if text:
-            self.remote_fw_label.config(text=f"Remote FW: {text[:28]}", foreground="darkgreen")
+        fw_text = text
+        morse_wpm = None
+
+        if text and "=" in text:
+            fields = {}
+            for part in text.split(";"):
+                part = part.strip()
+                if not part or "=" not in part:
+                    continue
+                key, value = part.split("=", 1)
+                fields[key.strip().lower()] = value.strip()
+
+            fw_text = fields.get("fw", text)
+            morse_wpm = fields.get("morsewpm")
+
+        if fw_text:
+            self.remote_fw_label.config(text=f"Remote FW: {fw_text[:28]}", foreground="darkgreen")
         else:
             self.remote_fw_label.config(text="Remote FW: --", foreground="grey")
+
+        if morse_wpm:
+            self.remote_morse_label.config(text=f"Morse WPM: {morse_wpm}", foreground="darkgreen")
+            if hasattr(self, "bottom_status") and self.bottom_status:
+                self.bottom_status.config(text=f"Device ready: {fw_text[:20]} | Morse WPM: {morse_wpm}")
+        else:
+            self.remote_morse_label.config(text="Morse WPM: --", foreground="grey")
 
     def update_status(self, payload):
         parts = payload.split(",")
@@ -798,6 +834,8 @@ class OOK48GUI:
             time.sleep(0.05)
             self.send(f"SET:halfrate:{self.config['halfrate']}")
             time.sleep(0.05)
+            self.send(f"SET:morsewpm:{int(self.config.get('morsewpm', 12))}")
+            time.sleep(0.05)
             self.send(f"SET:confidence:{self.config['confidence']:.3f}")
             time.sleep(0.05)
             for i, msg in enumerate(self.config["messages"]):
@@ -836,6 +874,7 @@ class OOK48GUI:
         self.config["txadv"] = int(self.txadv_var.get())
         self.config["rxret"] = int(self.rxret_var.get())
         self.config["halfrate"] = self.hr_combo.current()
+        self.config["morsewpm"] = max(5, min(40, int(self.morsewpm_var.get())))
         self.config["confidence"] = round(float(self.confidence_var.get()), 3)
         if hasattr(self, "acc_panel") and self.acc_panel:
             self.acc_panel.set_confidence_threshold(self.config["confidence"])
@@ -847,6 +886,7 @@ class OOK48GUI:
             self.send(f"SET:txadv:{self.config['txadv']}")
             self.send(f"SET:rxret:{self.config['rxret']}")
             self.send(f"SET:halfrate:{self.config['halfrate']}")
+            self.send(f"SET:morsewpm:{self.config['morsewpm']}")
             self.send(f"SET:confidence:{self.config['confidence']:.3f}")
             if new_app != self.config["app"]:
                 if messagebox.askyesno("Change App", "Changing app requires a reboot. Continue?"):
@@ -855,7 +895,29 @@ class OOK48GUI:
         else:
             self.config["app"] = new_app
         self.save_config()
+        self._sync_app_dependent_ui()
         self.bottom_status.config(text="Settings applied")
+
+    def _sync_app_dependent_ui(self):
+        app_text = ""
+        if hasattr(self, "app_combo") and self.app_combo:
+            app_text = str(self.app_combo.get() or "")
+        else:
+            idx = int(self.config.get("app", 0))
+            if 0 <= idx < len(APP_NAMES):
+                app_text = APP_NAMES[idx]
+
+        hide_acc = ("morse" in app_text.lower())
+
+        if hasattr(self, "acc_panel") and self.acc_panel:
+            is_visible = (self.acc_panel.winfo_manager() == "pack")
+            if hide_acc and is_visible:
+                self.acc_panel.pack_forget()
+            elif (not hide_acc) and (not is_visible):
+                self.acc_panel.pack(fill=tk.X, pady=(4, 0), before=self.decode_frame)
+
+        if hasattr(self, "conf_spin") and self.conf_spin:
+            self.conf_spin.config(state="normal")
 
     def _sync_decode_mode_controls(self):
         decmode = int(self.config.get("decmode", 0))
@@ -954,6 +1016,20 @@ class OOK48GUI:
         if not self.connected:
             self.bottom_status.config(text="Not connected")
             return
+        app_idx = int(self.config.get("app", 0))
+
+        if app_idx == 3:
+            text = text.replace("\r", " ").replace("\n", " ")
+            self.send(f"CMD:morsetx:{text}")
+            self.active_slot_label.config(text=f"▶ [MORSE] {text}", foreground="red")
+            self.bottom_status.config(text=f"TX Morse: {text}")
+            self.log(f"[SYS] Morse TX requested: {text}", "sys")
+            return
+
+        if app_idx != 0:
+            self.bottom_status.config(text="Free text TX is available in OOK48 or Morse mode")
+            return
+
         self.send(f"SET:msg:9:{text}")
         time.sleep(0.05)
         self.send("CMD:txmsg:9")

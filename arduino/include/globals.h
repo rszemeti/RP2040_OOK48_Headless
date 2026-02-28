@@ -20,6 +20,7 @@ struct Settings
     uint16_t txAdvance;
     uint16_t rxRetard;
     uint8_t  app;
+    uint8_t  morseWpm;
     float    confidenceThreshold;   // OOK48 decode confidence gate (default CONFIDENCE_THRESHOLD)
 };
 
@@ -32,7 +33,7 @@ extern bool core0Ready;
 enum DecodeModes  { NORMALMODE, ALTMODE, RAINSCATTERMODE };
 enum Core1Message { GENPLOT, DRAWSPECTRUM, DRAWWATERFALL, REDLINE, CYANLINE,
                     MESSAGE, TMESSAGE, ERROR, JTMESSAGE, PIMESSAGE, SFTMESSAGE };
-enum Apps         { OOK48, BEACONJT4, BEACONPI4 };
+enum Apps         { OOK48, BEACONJT4, BEACONPI4, MORSEMODE };
 enum Modes        { RX, TX };
 enum BModes       { JT4, PI4 };
 
