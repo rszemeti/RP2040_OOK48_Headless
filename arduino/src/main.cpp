@@ -10,6 +10,7 @@
 #include "hardware/irq.h"
 #include <pico/time.h>
 #include <arduinoFFT.h>
+#include <ctype.h>
 #include "defines.h"
 #include "globals.h"
 #include "dma.h"
@@ -42,13 +43,15 @@
 //   SET:txadv:<0-999>
 //   SET:rxret:<0-999>
 //   SET:halfrate:<0|1>
+//   SET:morsewpm:<5-40>
 //   SET:confidence:<value>          OOK48 confidence threshold, e.g. 0.180 (float)
-//   SET:app:<0|1|2>        0=OOK48 1=JT4 2=PI4  (causes reboot)
+//   SET:app:<0|1|2|3>      0=OOK48 1=JT4 2=PI4 3=Morse  (causes reboot)
 //   SET:msg:<0-9>:<text>   set TX message slot
 //   CMD:tx                 switch to transmit
 //   CMD:rx                 switch to receive
 //   CMD:txmsg:<0-9>        select TX message slot
 //   CMD:dashes             send continuous dashes for alignment
+//   CMD:morsetx:<text>     one-shot Morse TX of <text>
 //   CMD:ident              re-send RDY:<version> (useful when GUI connects to running device)
 //   CMD:clear              no-op, ack only
 //   CMD:reboot             reboot device
@@ -85,6 +88,130 @@ static constexpr uint32_t DASH_UNIT_US = 100000;  // 100 ms time unit
 static constexpr uint8_t DASH_ON_UNITS = 3;       // dash length
 static constexpr uint8_t DASH_OFF_UNITS = 1;      // inter-element gap
 
+static volatile bool morseTxMode = false;
+static volatile bool morseCompleteRequest = false;
+static volatile uint16_t morseSeqLen = 0;
+static volatile uint16_t morseSeqPos = 0;
+static volatile uint8_t morseUnitsLeft = 0;
+static volatile bool morseCurrentKey = false;
+static volatile uint32_t morseUnitUs = (1200000UL / MORSE_DEFAULT_WPM);
+static constexpr uint16_t MORSE_MAX_UNITS = 512;
+static volatile int8_t morseSeq[MORSE_MAX_UNITS]; // +n = key down n units, -n = key up n units
+
+uint32_t morseUnitFromWpm(uint8_t wpm)
+{
+    if (wpm < MORSE_MIN_WPM) wpm = MORSE_MIN_WPM;
+    if (wpm > MORSE_MAX_WPM) wpm = MORSE_MAX_WPM;
+    return 1200000UL / (uint32_t)wpm;
+}
+
+bool isOokLikeApp(void)
+{
+    return (settings.app == OOK48 || settings.app == MORSEMODE);
+}
+
+struct MorseMap
+{
+    char c;
+    const char *pattern;
+};
+
+static const MorseMap MORSE_TABLE[] = {
+    {'A', ".-"},    {'B', "-..."},  {'C', "-.-."},  {'D', "-.."},   {'E', "."},
+    {'F', "..-."},  {'G', "--."},   {'H', "...."},  {'I', ".."},    {'J', ".---"},
+    {'K', "-.-"},   {'L', ".-.."},  {'M', "--"},    {'N', "-."},    {'O', "---"},
+    {'P', ".--."},  {'Q', "--.-"},  {'R', ".-."},   {'S', "..."},   {'T', "-"},
+    {'U', "..-"},   {'V', "...-"},  {'W', ".--"},   {'X', "-..-"},  {'Y', "-.--"},
+    {'Z', "--.."},
+    {'0', "-----"}, {'1', ".----"}, {'2', "..---"}, {'3', "...--"}, {'4', "....-"},
+    {'5', "....."}, {'6', "-...."}, {'7', "--..."}, {'8', "---.."}, {'9', "----."},
+    {'/', "-..-."}, {'?', "..--.."},{'.', ".-.-.-"},{',', "--..--"},
+    {'-', "-....-"},{'+', ".-.-."}, {'=', "-...-"}
+};
+
+const char *morsePatternForChar(char c)
+{
+    char u = (char)toupper((unsigned char)c);
+    for (uint16_t i = 0; i < (sizeof(MORSE_TABLE) / sizeof(MORSE_TABLE[0])); i++)
+    {
+        if (MORSE_TABLE[i].c == u) return MORSE_TABLE[i].pattern;
+    }
+    return nullptr;
+}
+
+bool morseAppendUnits(int8_t units)
+{
+    if (units == 0) return true;
+    if (morseSeqLen >= MORSE_MAX_UNITS) return false;
+    morseSeq[morseSeqLen++] = units;
+    return true;
+}
+
+bool buildMorseSequence(const char *text)
+{
+    morseSeqLen = 0;
+    uint8_t pendingGap = 0;
+
+    for (uint16_t i = 0; text[i] != 0; i++)
+    {
+        char c = text[i];
+        if (c == ' ' || c == '\t')
+        {
+            if (morseSeqLen > 0 && pendingGap < 7) pendingGap = 7;
+            continue;
+        }
+
+        const char *pattern = morsePatternForChar(c);
+        if (pattern == nullptr) continue;
+
+        if (morseSeqLen > 0)
+        {
+            uint8_t letterGap = (pendingGap > 0) ? pendingGap : 3;
+            if (!morseAppendUnits(-(int8_t)letterGap)) return false;
+        }
+        pendingGap = 0;
+
+        for (uint8_t p = 0; pattern[p] != 0; p++)
+        {
+            uint8_t onUnits = (pattern[p] == '-') ? 3 : 1;
+            if (!morseAppendUnits((int8_t)onUnits)) return false;
+            if (pattern[p + 1] != 0)
+            {
+                if (!morseAppendUnits(-1)) return false;
+            }
+        }
+    }
+
+    return morseSeqLen > 0;
+}
+
+void morseTick(void)
+{
+    if (!morseTxMode || mode != TX)
+    {
+        Key = 0;
+        return;
+    }
+
+    if (morseUnitsLeft == 0)
+    {
+        if (morseSeqPos >= morseSeqLen)
+        {
+            Key = 0;
+            morseTxMode = false;
+            morseCompleteRequest = true;
+            return;
+        }
+
+        int8_t seg = morseSeq[morseSeqPos++];
+        morseCurrentKey = (seg > 0);
+        morseUnitsLeft = (uint8_t)(seg > 0 ? seg : -seg);
+    }
+
+    Key = morseCurrentKey;
+    morseUnitsLeft--;
+}
+
 // ---------------------------------------------------------------------------
 // Core 0 setup - time critical radio work
 // ---------------------------------------------------------------------------
@@ -99,7 +226,7 @@ void setup()
     pinMode(TXPIN, OUTPUT);
     digitalWrite(TXPIN, 0);
 
-    if (settings.app == OOK48)
+    if (isOokLikeApp())
     {
         mode = RX;
         RxInit();
@@ -130,6 +257,12 @@ bool TxIntervalInterrupt(struct repeating_timer *t)
         dashUnitPhase++;
         if (dashUnitPhase >= (DASH_ON_UNITS + DASH_OFF_UNITS))
             dashUnitPhase = 0;
+        return true;
+    }
+
+    if (morseTxMode)
+    {
+        morseTick();
         return true;
     }
 
@@ -167,7 +300,7 @@ void ppsISR(void)
 void doPPS(void)
 {
     PPSActive = 3;
-    if (settings.app == OOK48)
+    if (isOokLikeApp())
     {
         if (mode == RX)
         {
@@ -190,12 +323,23 @@ void doPPS(void)
 
 void loop()
 {
-    if (settings.app == OOK48)
+    if (isOokLikeApp())
     {
         if (mode == RX)
             RxTick();
         else
+        {
             TxTick();
+            if (morseCompleteRequest)
+            {
+                morseCompleteRequest = false;
+                mode = RX;
+                digitalWrite(KEYPIN, 0);
+                digitalWrite(TXPIN, 0);
+                Key = 0;
+                cancel_repeating_timer(&TxIntervalTimer);
+            }
+        }
     }
     else
     {
@@ -216,8 +360,10 @@ void setup1()
     Serial2.begin(GPS_DEFAULT_BAUD);
 
     gpsPointer = 0;
-    Serial.print("RDY:");
-    Serial.println(VERSION);
+    Serial.print("RDY:fw=");
+    Serial.print(VERSION);
+    Serial.print(";morsewpm=");
+    Serial.println((unsigned int)settings.morseWpm);
 }
 
 void loop1()
@@ -387,10 +533,30 @@ void handleCommand(char *cmd)
         return;
     }
 
+    if (strncmp(cmd, "SET:morsewpm:", 13) == 0)
+    {
+        int v = atoi(cmd + 13);
+        if (v >= MORSE_MIN_WPM && v <= MORSE_MAX_WPM)
+        {
+            char ack[32];
+            settings.morseWpm = (uint8_t)v;
+            morseUnitUs = morseUnitFromWpm(settings.morseWpm);
+            if (morseTxMode && mode == TX)
+            {
+                cancel_repeating_timer(&TxIntervalTimer);
+                add_repeating_timer_us(-((int32_t)morseUnitUs), TxIntervalInterrupt, NULL, &TxIntervalTimer);
+            }
+            sprintf(ack, "ACK:SET:morsewpm=%u", (unsigned int)settings.morseWpm);
+            Serial.println(ack);
+        }
+        else Serial.println("ERR:value out of range (5-40)");
+        return;
+    }
+
     if (strncmp(cmd, "SET:app:", 8) == 0)
     {
         int v = atoi(cmd + 8);
-        if (v >= 0 && v <= 2)
+        if (v >= 0 && v <= 3)
         {
             settings.app = v;
             Serial.println("ACK:SET:app - rebooting");
@@ -440,10 +606,12 @@ void handleCommand(char *cmd)
 
     if (strcmp(cmd, "CMD:tx") == 0)
     {
-        if (settings.app == OOK48 && mode == RX)
+        if (isOokLikeApp() && mode == RX)
         {
             dashAlignmentMode = false;
             dashUnitPhase = 0;
+            morseTxMode = false;
+            morseCompleteRequest = false;
             mode = TX;
             TxInit();
             digitalWrite(TXPIN, 1);
@@ -451,7 +619,7 @@ void handleCommand(char *cmd)
             TxBitPointer = 0;
             Serial.println("ACK:CMD:tx");
         }
-        else Serial.println("ERR:not in OOK48 RX mode");
+        else Serial.println("ERR:not in OOK48/Morse RX mode");
         return;
     }
 
@@ -461,6 +629,8 @@ void handleCommand(char *cmd)
         {
             dashAlignmentMode = false;
             dashUnitPhase = 0;
+            morseTxMode = false;
+            morseCompleteRequest = false;
             mode = RX;
             digitalWrite(KEYPIN, 0);
             digitalWrite(TXPIN, 0);
@@ -479,6 +649,8 @@ void handleCommand(char *cmd)
         {
             dashAlignmentMode = false;
             dashUnitPhase = 0;
+            morseTxMode = false;
+            morseCompleteRequest = false;
             TxMessNo = slot;
             messageChanging = true;
             if (mode == TX)
@@ -495,10 +667,12 @@ void handleCommand(char *cmd)
 
     if (strcmp(cmd, "CMD:dashes") == 0)
     {
-        if (settings.app == OOK48)
+        if (isOokLikeApp())
         {
             messageChanging = true;
             cancel_repeating_timer(&TxIntervalTimer);
+            morseTxMode = false;
+            morseCompleteRequest = false;
             dashAlignmentMode = true;
             dashUnitPhase = 0;
             mode = TX;
@@ -508,7 +682,46 @@ void handleCommand(char *cmd)
             messageChanging = false;
             Serial.println("ACK:CMD:dashes");
         }
-        else Serial.println("ERR:not in OOK48 mode");
+        else Serial.println("ERR:not in OOK48/Morse mode");
+        return;
+    }
+
+    if (strncmp(cmd, "CMD:morsetx:", 12) == 0)
+    {
+        if (!isOokLikeApp())
+        {
+            Serial.println("ERR:not in OOK48/Morse mode");
+            return;
+        }
+
+        const char *text = cmd + 12;
+        if (text[0] == 0)
+        {
+            Serial.println("ERR:missing morse text");
+            return;
+        }
+
+        if (!buildMorseSequence(text))
+        {
+            Serial.println("ERR:invalid morse text");
+            return;
+        }
+
+        messageChanging = true;
+        cancel_repeating_timer(&TxIntervalTimer);
+        dashAlignmentMode = false;
+        dashUnitPhase = 0;
+        morseTxMode = true;
+        morseCompleteRequest = false;
+        morseSeqPos = 0;
+        morseUnitsLeft = 0;
+        morseCurrentKey = false;
+        mode = TX;
+        digitalWrite(TXPIN, 1);
+        Key = 0;
+        add_repeating_timer_us(-((int32_t)morseUnitUs), TxIntervalInterrupt, NULL, &TxIntervalTimer);
+        messageChanging = false;
+        Serial.println("ACK:CMD:morsetx");
         return;
     }
 
@@ -520,8 +733,10 @@ void handleCommand(char *cmd)
 
     if (strcmp(cmd, "CMD:ident") == 0)
     {
-        Serial.print("RDY:");
-        Serial.println(VERSION);
+        Serial.print("RDY:fw=");
+        Serial.print(VERSION);
+        Serial.print(";morsewpm=");
+        Serial.println((unsigned int)settings.morseWpm);
         return;
     }
 
@@ -578,6 +793,8 @@ void defaultSettings(void)
     settings.txAdvance     = 0;
     settings.rxRetard      = 0;
     settings.app                = OOK48;
+    settings.morseWpm           = MORSE_DEFAULT_WPM;
+    morseUnitUs                 = morseUnitFromWpm(settings.morseWpm);
     settings.confidenceThreshold = CONFIDENCE_THRESHOLD;
     settings.calMagic           = 0;
     for (int i = 0; i < 10; i++)

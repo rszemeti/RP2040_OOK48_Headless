@@ -24,8 +24,11 @@ dist/
 assets/ook48.ico
 
 # Generated test artifacts (keep scripts/sources)
-Test Files/*.wav
-Test Files/*.png
-Test Files/*.log
-Test Files/ook48_config.json
-Test Files/rainscatter_tests/
+Test Files/generated/
+
+# ignore Egale backup files in PCB design ie Foo.b#1, Foo.b#2, etc. 
+# and Foo.s#1, Foo.s#2, etc.
+
+PCB/Eagle/*.b#*
+PCB/*.s#*
+
