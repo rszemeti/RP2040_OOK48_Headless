@@ -26,9 +26,8 @@ assets/ook48.ico
 # Generated test artifacts (keep scripts/sources)
 Test Files/generated/
 
-# ignore Egale backup files in PCB design ie Foo.b#1, Foo.b#2, etc. 
+# Ignore Eagle backup files in PCB design ie Foo.b#1, Foo.b#2, etc.
 # and Foo.s#1, Foo.s#2, etc.
-
-PCB/Eagle/*.b#*
-PCB/*.s#*
+PCB/Eagle/*.b\#*
+PCB/Eagle/*.s\#*
 
