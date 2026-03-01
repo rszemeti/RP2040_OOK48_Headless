@@ -425,6 +425,22 @@ void loop1()
             }
             Serial.println();
             break;
+        case MORSEMESSAGE:
+            Serial.print("MCH:");
+            if      (morseDecoded == ' ')  Serial.println("<SP>");
+            else if (morseDecoded == '?')  Serial.println("<UNK>");
+            else                           Serial.println(String(morseDecoded));
+            break;
+        case MORSELOCKED:
+        {
+            char s[24];
+            sprintf(s, "MLS:%.1f", morseWpmEst);
+            Serial.println(s);
+            break;
+        }
+        case MORSELOST:
+            Serial.println("MLS:LOST");
+            break;
         }
     }
 

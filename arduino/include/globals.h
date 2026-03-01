@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include "defines.h"
+#include "morse_rx.h"
 
 // ---------------------------------------------------------------------------
 // Settings structure - held in RAM, pushed from Python GUI on connect.
@@ -32,7 +33,8 @@ extern bool core0Ready;
 // ---------------------------------------------------------------------------
 enum DecodeModes  { NORMALMODE, ALTMODE, RAINSCATTERMODE };
 enum Core1Message { GENPLOT, DRAWSPECTRUM, DRAWWATERFALL, REDLINE, CYANLINE,
-                    MESSAGE, TMESSAGE, ERROR, JTMESSAGE, PIMESSAGE, SFTMESSAGE };
+                    MESSAGE, TMESSAGE, ERROR, JTMESSAGE, PIMESSAGE, SFTMESSAGE,
+                    MORSEMESSAGE, MORSELOCKED, MORSELOST };
 enum Apps         { OOK48, BEACONJT4, BEACONPI4, MORSEMODE };
 enum Modes        { RX, TX };
 enum BModes       { JT4, PI4 };
@@ -75,6 +77,12 @@ extern bool     halfRate;
 
 extern char     decoded;
 extern float    sftMagnitudes[CACHESIZE];  // soft magnitudes for SFT: serial output
+
+// Morse RX
+extern MorseRxDecoder morseDecoder;
+extern char  morseDecoded;   // last decoded char/space, cross-core via FIFO
+extern float morseWpmEst;    // WPM at lock, for status display
+extern uint32_t dmaTransferCount;  // set by RxInit(), read by dma_init()
 
 // GPS
 extern char     gpsBuffer[256];

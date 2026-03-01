@@ -299,9 +299,10 @@ class OOK48GUI:
         self.decode_text.tag_config("rx", foreground="green")
         self.decode_text.tag_config("tx", foreground="red")
         self.decode_text.tag_config("err", foreground="orange")
-        self.decode_text.tag_config("jt", foreground="darkgreen")
-        self.decode_text.tag_config("pi", foreground="purple")
-        self.decode_text.tag_config("sys", foreground="grey")
+        self.decode_text.tag_config("jt",    foreground="darkgreen")
+        self.decode_text.tag_config("pi",    foreground="purple")
+        self.decode_text.tag_config("morse", foreground="cyan")
+        self.decode_text.tag_config("sys",   foreground="grey")
         self.decode_text.bind("<Double-Button-1>", self.on_decode_double_click)
 
         # ---- Right pane: TX controls ----

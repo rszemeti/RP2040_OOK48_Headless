@@ -43,7 +43,7 @@ void dma_init(void)
     channel_config_set_read_increment(&cfg, false);
     channel_config_set_write_increment(&cfg, true);
     channel_config_set_dreq(&cfg, DREQ_ADC);
-    dma_channel_configure(dma_chan, &cfg, buffer[bufIndex], &adc_hw->fifo, NUMBEROFOVERSAMPLES, false);
+    dma_channel_configure(dma_chan, &cfg, buffer[bufIndex], &adc_hw->fifo, dmaTransferCount, false);
     dma_channel_set_irq0_enabled(dma_chan, true);
     irq_set_exclusive_handler(DMA_IRQ_0, dma_handler);
     irq_set_enabled(DMA_IRQ_0, true);

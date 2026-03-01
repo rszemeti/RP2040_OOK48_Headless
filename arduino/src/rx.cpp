@@ -11,47 +11,113 @@
 
 void RxInit(void)
 {
-  sampleRate = OVERSAMPLERATE;                  //samples per second.  
-  cacheSize = CACHESIZE;                    // tone decode samples.
-  if(halfRate) cacheSize = CACHESIZE*2;
-  rxTone = TONE800;
-  toneTolerance = TONETOLERANCE;
-  numberOfTones = 1;
-  numberOfBins = OOKNUMBEROFBINS;
-  startBin = OOKSTARTBIN;
+  sampleRate       = OVERSAMPLERATE;
 
-  calcLegend();
-  dma_init();                       //Initialise and start ADC conversions and DMA transfers. 
+  if (settings.app == MORSEMODE)
+  {
+    dmaTransferCount = MORSE_FRAME_SAMPLES;      // 2048 ADC samples → ~36 fps
+    numberOfBins     = MORSE_FFT_BINS;
+    startBin         = 0;
+    rxTone           = MORSE_TONE_BIN;
+    toneTolerance    = 3;
+    numberOfTones    = 1;
+    morseDecoder.begin(MORSE_FRAME_RATE, MORSE_MIN_WPM, MORSE_MAX_WPM, MORSE_TONE_BIN);
+  }
+  else
+  {
+    dmaTransferCount = NUMBEROFOVERSAMPLES;
+    cacheSize        = CACHESIZE;
+    if (halfRate) cacheSize = CACHESIZE * 2;
+    rxTone           = TONE800;
+    toneTolerance    = TONETOLERANCE;
+    numberOfTones    = 1;
+    numberOfBins     = OOKNUMBEROFBINS;
+    startBin         = OOKSTARTBIN;
+    calcLegend();
+  }
+
+  dma_init();                       //Initialise and start ADC conversions and DMA transfers.
   dma_handler();                    //call the interrupt handler once to start transfers
   dmaReady = false;                 //reset the transfer ready flag
   cachePoint = 0;                   //zero the data received cache
 }
 
+// Waterfall accumulator for morse mode (file-static, persists across calls)
+static float  morseWfAccum[MORSE_FFT_BINS] = {};
+static uint8_t morseWfCount = 0;
+
 void RxTick(void)
 {
-  uint8_t tn;
   static unsigned long lastDma;
 
+  if (settings.app == MORSEMODE)
+  {
+    if (!dmaReady) return;
+    lastDma = millis();
+    calcMorseSpectrum();
+
+    // Accumulate bin magnitudes for waterfall
+    for (int i = 0; i < MORSE_FFT_BINS; i++)
+      morseWfAccum[i] += magnitude[i];
+
+    // Feed morse decoder with this frame's tone bin magnitude
+    int n = morseDecoder.feed(magnitude[MORSE_TONE_BIN]);
+    for (int i = 0; i < n; i++)
+    {
+      MorseEvent ev = morseDecoder.event(i);
+      if (ev.kind == MorseEvt::CHAR || ev.kind == MorseEvt::WORD_SEP)
+      {
+        morseDecoded = ev.ch;
+        rp2040.fifo.push(MORSEMESSAGE);
+      }
+      else if (ev.kind == MorseEvt::LOCKED)
+      {
+        morseWpmEst = ev.wpm;
+        rp2040.fifo.push(MORSELOCKED);
+      }
+      else if (ev.kind == MorseEvt::LOST)
+      {
+        rp2040.fifo.push(MORSELOST);
+      }
+    }
+
+    // Send waterfall every MORSE_WF_FRAMES frames (~9/sec)
+    if (++morseWfCount >= MORSE_WF_FRAMES)
+    {
+      morseWfCount = 0;
+      for (int i = 0; i < MORSE_FFT_BINS; i++)
+        magnitude[i] = morseWfAccum[i];
+      rp2040.fifo.push(GENPLOT);
+      rp2040.fifo.push(DRAWSPECTRUM);
+      rp2040.fifo.push(DRAWWATERFALL);
+      memset(morseWfAccum, 0, sizeof(morseWfAccum));
+    }
+
+    dmaReady = false;
+    return;
+  }
+
+  // --- OOK48 path ---
   if((millis() - lastDma) > 250) cachePoint = 0;                //if we have not had a DMA transfer recently reset the pointer.
 
-   if((dmaReady) && (cachePoint < cacheSize))                                                 //Do we have a complete buffer of ADC samples ready?
+  if((dmaReady) && (cachePoint < cacheSize))                    //Do we have a complete buffer of ADC samples ready?
     {
       lastDma = millis();
       calcSpectrum();                                           //Perform the FFT of the data
-      rp2040.fifo.push(GENPLOT);                                //Ask Core 1 to generate data for the Displays from the FFT results.  
+      rp2040.fifo.push(GENPLOT);                                //Ask Core 1 to generate data for the Displays from the FFT results.
       rp2040.fifo.push(DRAWSPECTRUM);                           //Ask core 1 to draw the Spectrum Display
-      rp2040.fifo.push(DRAWWATERFALL);                          //Ask core 1 to draw the Waterfall Display      
+      rp2040.fifo.push(DRAWWATERFALL);                          //Ask core 1 to draw the Waterfall Display
       saveCache();                                              //save the FFT magnitudes to the cache.
       cachePoint++;
       if(cachePoint == cacheSize)                               //If the Cache is full (8 bits of data)
         {
           if(PPSActive)                                         //decodes are only valid if the PPS Pulse is present
-          { 
+          {
             decodeCache();                                      //extract the character
-            rp2040.fifo.push(MESSAGE);                         //Ask Core 1 to display it 
+            rp2040.fifo.push(MESSAGE);                         //Ask Core 1 to display it
           }
-        }                                  
-      dmaReady = false;                                         //Clear the flag ready for next time     
+        }
+      dmaReady = false;                                         //Clear the flag ready for next time
     }
 }
 

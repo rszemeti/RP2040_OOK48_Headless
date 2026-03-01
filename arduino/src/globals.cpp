@@ -38,6 +38,11 @@ bool     halfRate = false;
 char     decoded;
 float    sftMagnitudes[CACHESIZE];   // soft magnitudes copied here before SFTMESSAGE push
 
+MorseRxDecoder morseDecoder;
+char     morseDecoded = ' ';
+float    morseWpmEst  = 0.0f;
+uint32_t dmaTransferCount = NUMBEROFOVERSAMPLES;  // default; overridden by RxInit()
+
 char     gpsBuffer[256];
 int      gpsPointer;
 char     gpsCh;
