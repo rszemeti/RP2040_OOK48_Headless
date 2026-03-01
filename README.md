@@ -163,6 +163,15 @@ The easiest solution for running the GUI on Winows is to download our "one file"
 
 This is a prebuilt GUI instead of running all the Python stuff locally, just download `OOK48_GUI.exe` from the latest GitHub Release assets (see **Download latest release assets** above).
 
+For local one-file builds with metadata stamping:
+
+```powershell
+.\scripts\build_gui_release.ps1
+```
+
+This script now auto-generates `assets/windows_version.txt` before calling PyInstaller.
+Version fields are derived from Git (`tag`/`commit count`, with commit SHA/date in metadata comments).
+
 ## Python GUI
 
 If you want to fiddle with the GUI and make changes, running the rawPython version is for you.

@@ -1,8 +1,8 @@
-# UTF-8
+﻿# UTF-8
 VSVersionInfo(
   ffi=FixedFileInfo(
-    filevers=(1, 0, 0, 0),
-    prodvers=(1, 0, 0, 0),
+    filevers=(1, 0, 0, 157),
+    prodvers=(1, 0, 0, 157),
     mask=0x3f,
     flags=0x0,
     OS=0x40004,
@@ -17,12 +17,13 @@ VSVersionInfo(
         '040904B0',
         [StringStruct('CompanyName', 'OOK48 Project Contributors'),
         StringStruct('FileDescription', 'OOK48 Serial Control GUI'),
-        StringStruct('FileVersion', '1.0.0.0'),
+        StringStruct('FileVersion', '1.0.0.157'),
         StringStruct('InternalName', 'OOK48_GUI'),
-        StringStruct('LegalCopyright', 'Colin Durbridge (G4EML), Robin Szemeti (G1YFG)'),
+        StringStruct('LegalCopyright', 'Colin Durbridge (G4EML), Robin Szemeti (G1YFG) | commit cee579e'),
         StringStruct('OriginalFilename', 'OOK48_GUI.exe'),
         StringStruct('ProductName', 'OOK48 Headless GUI'),
-        StringStruct('ProductVersion', '1.0.0.0')])
+        StringStruct('ProductVersion', '1.0.0.157'),
+        StringStruct('Comments', 'Auto-generated on 2026-03-01 UTC')])
       ]),
     VarFileInfo([VarStruct('Translation', [1033, 1200])])
   ]

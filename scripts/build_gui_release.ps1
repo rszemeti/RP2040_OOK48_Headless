@@ -13,6 +13,7 @@ if (-not (Test-Path $pyinstaller)) {
 }
 
 & $python scripts\make_icon.py
+& (Join-Path $repoRoot 'scripts\generate_windows_version.ps1')
 
 $iconPath = Join-Path $repoRoot 'assets\ook48.ico'
 $versionPath = Join-Path $repoRoot 'assets\windows_version.txt'
