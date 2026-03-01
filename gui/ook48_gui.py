@@ -53,6 +53,12 @@ APP_NAMES = ["OOK48", "JT4G Decoder", "PI4 Decoder", "Morse"]
 REPO_URL = "https://github.com/rszemeti/RP2040_OOK48_Headless"
 
 class OOK48GUI:
+    WF_BINS = 240
+    MORSE_WF_PAYLOAD_BINS = WF_BINS + 1
+    MORSE_CENTROID_MIN_HZ = 100
+    MORSE_CENTROID_MAX_HZ = 3000
+    MORSE_NYQUIST_HZ = 4608.0
+
     SLOT_LABELS = [
         "CQ",
         "Their call",
@@ -87,6 +93,14 @@ class OOK48GUI:
         self.wf_dirty = False  # tracks when a new message line starts
         self.supports_rainscatter = True
         self.config_push_in_progress = False
+        self.app_switch_pending = False
+        self.pending_app_target = None
+        self.app_switch_timeout_id = None
+        self.morse_lock_text = "--"
+        self.morse_lock_wpm = None
+        self.morse_last_char = "--"
+        self.wf_marker_hz = None
+        self.morse_track_hz = None
 
         self.build_ui()
         self.refresh_ports()
@@ -193,13 +207,13 @@ class OOK48GUI:
 
         self.status_label = ttk.Label(conn_frame, text="Disconnected", foreground="red")
         self.status_label.pack(side=tk.LEFT, padx=10)
+        self.app_status_label = ttk.Label(conn_frame, text="App: --", foreground="grey")
+        self.app_status_label.pack(side=tk.LEFT, padx=8)
 
         self.gps_label = ttk.Label(conn_frame, text="GPS: --:--:--", foreground="grey")
         self.gps_label.pack(side=tk.RIGHT, padx=10)
         self.loc_label = ttk.Label(conn_frame, text="", foreground="grey")
         self.loc_label.pack(side=tk.RIGHT, padx=5)
-        self.remote_morse_label = ttk.Label(conn_frame, text="Morse WPM: --", foreground="grey")
-        self.remote_morse_label.pack(side=tk.RIGHT, padx=10)
         self.remote_fw_label = ttk.Label(conn_frame, text="Remote FW: --", foreground="grey")
         self.remote_fw_label.pack(side=tk.RIGHT, padx=10)
 
@@ -226,10 +240,11 @@ class OOK48GUI:
         self.build_settings_tab(cfg_tab)
 
         # Bottom status bar
-        status_bar = ttk.Frame(self.root)
+        status_bar = tk.Frame(self.root, bd=1, relief=tk.SUNKEN, bg="#d9d9d9", height=24)
         status_bar.pack(fill=tk.X, side=tk.BOTTOM)
-        self.bottom_status = ttk.Label(status_bar, text="Ready", anchor=tk.W)
-        self.bottom_status.pack(fill=tk.X, padx=5)
+        status_bar.pack_propagate(False)
+        self.bottom_status = tk.Label(status_bar, text="Ready", anchor=tk.W, padx=5, bg="#d9d9d9")
+        self.bottom_status.pack(fill=tk.X)
 
     def build_menu(self):
         menubar = tk.Menu(self.root)
@@ -277,6 +292,7 @@ class OOK48GUI:
         self.wf_canvas.pack(fill=tk.X)
         self.wf_canvas.bind("<Configure>", self._wf_on_resize)
         self.wf_canvas_image_id = None
+        self.wf_canvas_marker_id = None
         self.wf_rows = []
         self.wf_tk_image = None
 
@@ -284,6 +300,41 @@ class OOK48GUI:
         self.acc_panel = AccumulatorPanel(rx_frame, on_state_change=self.on_acc_state_change)
         self.acc_panel.pack(fill=tk.X, pady=(4, 0))
         self.acc_panel.set_confidence_threshold(self.config.get("confidence", 0.180))
+
+        # Morse RX panel (replaces accumulator panel in Morse app)
+        self.morse_panel = ttk.LabelFrame(rx_frame, text="Morse RX", padding=4)
+        morse_row = ttk.Frame(self.morse_panel)
+        morse_row.pack(fill=tk.X)
+        ttk.Label(morse_row, text="Lock:").grid(row=0, column=0, sticky=tk.W, padx=(0, 4), pady=1)
+        self.morse_lock_value = ttk.Label(morse_row, text="--", foreground="grey")
+        self.morse_lock_value.grid(row=0, column=1, sticky=tk.W, pady=1)
+        ttk.Label(morse_row, text="WPM:").grid(row=0, column=2, sticky=tk.W, padx=(12, 4), pady=1)
+        self.morse_wpm_value = ttk.Label(morse_row, text="--", foreground="grey")
+        self.morse_wpm_value.grid(row=0, column=3, sticky=tk.W, pady=1)
+        ttk.Label(morse_row, text="Last:").grid(row=0, column=4, sticky=tk.W, padx=(12, 4), pady=1)
+        self.morse_last_value = ttk.Label(morse_row, text="--", foreground="grey")
+        self.morse_last_value.grid(row=0, column=5, sticky=tk.W, pady=1)
+        ttk.Label(morse_row, text="Track:").grid(row=0, column=6, sticky=tk.W, padx=(12, 4), pady=1)
+        self.morse_track_value = ttk.Label(morse_row, text="--", foreground="grey")
+        self.morse_track_value.grid(row=0, column=7, sticky=tk.W, pady=1)
+        ttk.Label(morse_row, text="Decode:").grid(row=0, column=8, sticky=tk.W, padx=(12, 4), pady=1)
+        self.morse_decode_value = ttk.Label(morse_row, text="--", foreground="grey")
+        self.morse_decode_value.grid(row=0, column=9, sticky=tk.W, pady=1)
+
+        morse_tx_row = ttk.Frame(self.morse_panel)
+        morse_tx_row.pack(fill=tk.X, pady=(4, 0))
+        ttk.Label(morse_tx_row, text="TX WPM:").pack(side=tk.LEFT)
+        self.morse_panel_wpm_var = tk.IntVar(value=int(self.config.get("morsewpm", 12)))
+        self.morse_panel_wpm_spin = ttk.Spinbox(
+            morse_tx_row,
+            from_=5,
+            to=40,
+            textvariable=self.morse_panel_wpm_var,
+            width=6,
+        )
+        self.morse_panel_wpm_spin.pack(side=tk.LEFT, padx=(4, 6))
+        self.morse_panel_wpm_spin.bind("<Return>", self.apply_morse_panel_wpm)
+        ttk.Button(morse_tx_row, text="Set", command=self.apply_morse_panel_wpm).pack(side=tk.LEFT)
 
         # Decoded messages
         self.decode_frame = ttk.LabelFrame(rx_frame, text="Decoded Messages", padding=2)
@@ -449,6 +500,8 @@ class OOK48GUI:
         ttk.Label(sf, text="Morse WPM:").grid(row=7, column=0, sticky=tk.W, pady=3, padx=5)
         self.morsewpm_var = tk.IntVar(value=int(self.config.get("morsewpm", 12)))
         ttk.Spinbox(sf, from_=5, to=40, textvariable=self.morsewpm_var, width=8).grid(row=7, column=1, sticky=tk.W, pady=3, padx=5)
+        if hasattr(self, "morse_panel_wpm_var"):
+            self.morse_panel_wpm_var.set(int(self.morsewpm_var.get()))
 
         # Buttons
         btn_frame = ttk.Frame(sf)
@@ -521,9 +574,26 @@ class OOK48GUI:
             except queue.Empty:
                 break
             try:
-                bins = np.array([int(x) for x in data.split(",") if x.strip()], dtype=np.uint8)
+                vals = [int(x) for x in data.split(",") if x.strip()]
             except ValueError:
                 continue
+            if not vals:
+                continue
+
+            # Optional trailing Morse centroid telemetry cell: WF:<...>,<centroidHz>
+            # Detect by payload shape/value, independent of GUI app state.
+            if len(vals) == (self.wf_bins + 1 if self.wf_bins else self.MORSE_WF_PAYLOAD_BINS):
+                tail = vals[-1]
+                if self.MORSE_CENTROID_MIN_HZ <= tail <= self.MORSE_CENTROID_MAX_HZ:
+                    self.wf_marker_hz = tail
+                    self.morse_track_hz = tail
+                    vals = vals[:-1]
+                else:
+                    self.wf_marker_hz = None
+            else:
+                self.wf_marker_hz = None
+
+            bins = np.array(vals, dtype=np.uint8)
             if bins.size == 0:
                 continue
             self.wf_bins = bins.size
@@ -536,7 +606,10 @@ class OOK48GUI:
             self._wf_redraw()
             self.wf_dirty = False
             if self.wf_rows:
-                self.wf_info.config(text=f"{self.wf_bins} bins  |  {len(self.wf_rows)} rows")
+                if self.wf_marker_hz is not None:
+                    self.wf_info.config(text=f"{self.wf_bins} bins  |  {len(self.wf_rows)} rows  |  {self.wf_marker_hz} Hz")
+                else:
+                    self.wf_info.config(text=f"{self.wf_bins} bins  |  {len(self.wf_rows)} rows")
 
         self.root.after(33, self._wf_poll)   # ~30 fps cap
 
@@ -587,6 +660,32 @@ class OOK48GUI:
         else:
             self.wf_canvas.itemconfig(self.wf_canvas_image_id, image=self.wf_tk_image)
 
+        # Morse mode tracked-frequency marker overlay (always visible)
+        if self.wf_marker_hz is not None:
+            nyquist_hz = self.MORSE_NYQUIST_HZ
+            marker_hz = float(self.wf_marker_hz)
+            if marker_hz < 0.0:
+                marker_hz = 0.0
+            if marker_hz > nyquist_hz:
+                marker_hz = nyquist_hz
+            marker_x = int((marker_hz / nyquist_hz) * (cw - 1))
+            if marker_x < 0:
+                marker_x = 0
+            if marker_x >= cw:
+                marker_x = cw - 1
+
+            if self.wf_canvas_marker_id is None:
+                self.wf_canvas_marker_id = self.wf_canvas.create_line(
+                    marker_x, 0, marker_x, 12, fill="#00ff00", width=3
+                )
+            else:
+                self.wf_canvas.coords(self.wf_canvas_marker_id, marker_x, 0, marker_x, 12)
+                self.wf_canvas.itemconfig(self.wf_canvas_marker_id, fill="#00ff00", width=3)
+        else:
+            if self.wf_canvas_marker_id is not None:
+                self.wf_canvas.delete(self.wf_canvas_marker_id)
+                self.wf_canvas_marker_id = None
+
     def _wf_on_resize(self, event):
         self.wf_dirty = True   # redraw on next poll cycle
 
@@ -604,9 +703,15 @@ class OOK48GUI:
 
     def wf_clear(self):
         self.wf_rows.clear()
+        self.wf_marker_hz = None
+        self.morse_track_hz = None
+        self._refresh_morse_panel()
         if self.wf_canvas_image_id:
             self.wf_canvas.delete(self.wf_canvas_image_id)
             self.wf_canvas_image_id = None
+        if self.wf_canvas_marker_id:
+            self.wf_canvas.delete(self.wf_canvas_marker_id)
+            self.wf_canvas_marker_id = None
         self.wf_info.config(text="No data")
 
     # ------------------------------------------------------------------
@@ -649,6 +754,11 @@ class OOK48GUI:
 
     def disconnect(self):
         self.connected = False
+        if self.app_switch_timeout_id is not None:
+            self.root.after_cancel(self.app_switch_timeout_id)
+            self.app_switch_timeout_id = None
+        self.app_switch_pending = False
+        self.pending_app_target = None
         if hasattr(self, "acc_panel") and self.acc_panel:
             self.acc_panel.reset()
         if self.serial_port:
@@ -659,17 +769,26 @@ class OOK48GUI:
             self.serial_port = None
         self.connect_btn.config(text="Connect")
         self.status_label.config(text="Disconnected", foreground="red")
+        if hasattr(self, "app_status_label"):
+            self.app_status_label.config(text="App: --", foreground="grey")
+        self.morse_lock_text = "--"
+        self.morse_lock_wpm = None
+        self.morse_last_char = "--"
+        self._refresh_morse_panel()
         self.tx_mode = False
         self.current_loc = ""
         self.last_decode_tag = None
+        if hasattr(self, "wf_canvas") and self.wf_canvas:
+            self.wf_clear()
         self.wf_bins = 0
         self.wf_height = 300    # number of history rows to keep
         self.wf_queue = queue.Queue()  # serial thread -> GUI thread
         self.wf_dirty = False  # tracks when a new message line starts
+        self.wf_marker_hz = None
+        self.morse_track_hz = None
+        self._refresh_morse_panel()
         if hasattr(self, "remote_fw_label"):
             self.remote_fw_label.config(text="Remote FW: --", foreground="grey")
-        if hasattr(self, "remote_morse_label"):
-            self.remote_morse_label.config(text="Morse WPM: --", foreground="grey")
         self.level_bar["value"] = 0
         self.level_label.config(text="--", foreground="grey")
         self.update_tx_button()
@@ -698,6 +817,10 @@ class OOK48GUI:
             self.last_decode_tag = None
             self.update_remote_fw(line[4:])
             self.log(f"[SYS] Device ready: {line[4:]}", "sys")
+        elif line.startswith("EVT:APPPENDING:"):
+            self.handle_app_pending(line[15:])
+        elif line.startswith("EVT:APP:"):
+            self.handle_app_event(line[8:])
         elif line.startswith("STA:"):
             self.update_status(line[4:])
         elif line.startswith("MSG:"):
@@ -726,6 +849,17 @@ class OOK48GUI:
                         self.acc_panel.push(mags)
                 except ValueError:
                     pass
+        elif line.startswith("MCH:"):
+            char = line[4:]
+            if char == "<SP>":
+                char = " "
+            elif char == "<UNK>":
+                char = "?"
+            self.morse_last_char = "<SP>" if char == " " else char
+            self._refresh_morse_panel()
+            self.append_decode(char, "morse")
+        elif line.startswith("MLS:"):
+            self.handle_morse_lock(line[4:])
         elif line.startswith("ACK:"):
 
             self.last_decode_tag = None
@@ -740,6 +874,132 @@ class OOK48GUI:
                 self._handle_legacy_decode_mode()
             self.bottom_status.config(text=f"! {line}")
             self.log(f"[ERR] {line[4:]}", "err")
+
+    def handle_app_pending(self, payload):
+        try:
+            app_id = int(str(payload).strip())
+        except (TypeError, ValueError):
+            return
+        if app_id < 0 or app_id >= len(APP_NAMES):
+            return
+        self.app_switch_pending = True
+        self.pending_app_target = app_id
+        self.status_label.config(text="Switching app…", foreground="orange")
+        if hasattr(self, "app_status_label"):
+            self.app_status_label.config(text=f"App: switching to {APP_NAMES[app_id]}…", foreground="orange")
+        if self.app_switch_timeout_id is not None:
+            self.root.after_cancel(self.app_switch_timeout_id)
+        self.app_switch_timeout_id = self.root.after(3500, self._on_app_switch_timeout)
+        self.bottom_status.config(text=f"Switching to {APP_NAMES[app_id]}…")
+        self.log(f"[SYS] App switch pending: {APP_NAMES[app_id]} ({app_id})", "sys")
+
+    def handle_app_event(self, payload):
+        try:
+            app_id = int(str(payload).strip())
+        except (TypeError, ValueError):
+            return
+        if app_id < 0 or app_id >= len(APP_NAMES):
+            return
+
+        self.app_switch_pending = False
+        self.pending_app_target = None
+        if self.app_switch_timeout_id is not None:
+            self.root.after_cancel(self.app_switch_timeout_id)
+            self.app_switch_timeout_id = None
+        self.config["app"] = app_id
+        if hasattr(self, "app_combo") and self.app_combo:
+            self.app_combo.current(app_id)
+        self._sync_app_dependent_ui()
+        self.save_config()
+
+        if self.connected:
+            self.status_label.config(text="Connected", foreground="green")
+        if hasattr(self, "app_status_label"):
+            self.app_status_label.config(text=f"App: {APP_NAMES[app_id]}", foreground="darkgreen")
+        self.bottom_status.config(text=f"Active app: {APP_NAMES[app_id]}")
+        self.log(f"[SYS] Active app: {APP_NAMES[app_id]} ({app_id})", "sys")
+
+    def _on_app_switch_timeout(self):
+        self.app_switch_timeout_id = None
+        if not self.app_switch_pending:
+            return
+
+        target = self.pending_app_target
+        if target is not None and 0 <= target < len(APP_NAMES):
+            target_text = APP_NAMES[target]
+        else:
+            target_text = "selected app"
+
+        self.app_switch_pending = False
+        self.pending_app_target = None
+
+        if self.connected:
+            self.status_label.config(text="Connected", foreground="green")
+        if hasattr(self, "app_status_label"):
+            self.app_status_label.config(text="App: switch timeout", foreground="red")
+        self.bottom_status.config(text=f"No EVT:APP confirmation for {target_text}")
+        self.log(f"[WARN] App switch timeout waiting for EVT:APP ({target_text})", "err")
+
+    def handle_morse_lock(self, payload):
+        text = str(payload).strip()
+        if not text:
+            return
+
+        if text.upper() == "LOST":
+            self.morse_lock_text = "unlocked"
+            self.morse_lock_wpm = None
+            self._refresh_morse_panel()
+            self.bottom_status.config(text="Morse RX lock lost")
+            self.log("[SYS] Morse RX lock lost", "sys")
+            return
+
+        try:
+            wpm = float(text)
+        except ValueError:
+            return
+
+        self.morse_lock_text = "locked"
+        self.morse_lock_wpm = wpm
+        self._refresh_morse_panel()
+        self.bottom_status.config(text=f"Morse RX locked ({wpm:.1f} WPM)")
+        self.log(f"[SYS] Morse RX locked at {wpm:.1f} WPM", "sys")
+
+    def _refresh_morse_panel(self):
+        if not hasattr(self, "morse_lock_value"):
+            return
+
+        lock_text = self.morse_lock_text or "--"
+        if lock_text == "locked":
+            self.morse_lock_value.config(text="Locked", foreground="darkgreen")
+        elif lock_text == "unlocked":
+            self.morse_lock_value.config(text="Unlocked", foreground="orange")
+        else:
+            self.morse_lock_value.config(text="--", foreground="grey")
+
+        if self.morse_lock_wpm is None:
+            self.morse_wpm_value.config(text="--", foreground="grey")
+        else:
+            self.morse_wpm_value.config(text=f"{self.morse_lock_wpm:.1f}", foreground="darkgreen")
+
+        last = self.morse_last_char if self.morse_last_char else "--"
+        self.morse_last_value.config(text=last, foreground="darkgreen" if last != "--" else "grey")
+
+        if hasattr(self, "morse_track_value"):
+            if self.morse_track_hz is None:
+                self.morse_track_value.config(text="--", foreground="grey")
+            else:
+                self.morse_track_value.config(text=f"{int(self.morse_track_hz)} Hz", foreground="darkgreen")
+
+        if hasattr(self, "morse_decode_value"):
+            in_morse = int(self.config.get("app", 0)) == 3
+            if not in_morse:
+                self.morse_decode_value.config(text="--", foreground="grey")
+            else:
+                mode = int(self.config.get("decmode", 0))
+                if mode == 2:
+                    self.morse_decode_value.config(text="Wideband", foreground="darkgreen")
+                else:
+                    self.morse_decode_value.config(text="Tone", foreground="darkgreen")
 
     def _handle_legacy_decode_mode(self):
         """Fallback for older firmware that does not support decode mode 2."""
@@ -772,12 +1032,18 @@ class OOK48GUI:
         else:
             self.remote_fw_label.config(text="Remote FW: --", foreground="grey")
 
-        if morse_wpm:
-            self.remote_morse_label.config(text=f"Morse WPM: {morse_wpm}", foreground="darkgreen")
-            if hasattr(self, "bottom_status") and self.bottom_status:
-                self.bottom_status.config(text=f"Device ready: {fw_text[:20]} | Morse WPM: {morse_wpm}")
-        else:
-            self.remote_morse_label.config(text="Morse WPM: --", foreground="grey")
+        if morse_wpm and hasattr(self, "bottom_status") and self.bottom_status:
+            try:
+                wpm = int(float(morse_wpm))
+                wpm = max(5, min(40, wpm))
+                self.config["morsewpm"] = wpm
+                if hasattr(self, "morsewpm_var"):
+                    self.morsewpm_var.set(wpm)
+                if hasattr(self, "morse_panel_wpm_var"):
+                    self.morse_panel_wpm_var.set(wpm)
+            except ValueError:
+                pass
+            self.bottom_status.config(text=f"Device ready: {fw_text[:20]} | Morse WPM: {morse_wpm}")
 
     def update_status(self, payload):
         parts = payload.split(",")
@@ -876,10 +1142,14 @@ class OOK48GUI:
         self.config["rxret"] = int(self.rxret_var.get())
         self.config["halfrate"] = self.hr_combo.current()
         self.config["morsewpm"] = max(5, min(40, int(self.morsewpm_var.get())))
+        if hasattr(self, "morse_panel_wpm_var"):
+            self.morse_panel_wpm_var.set(self.config["morsewpm"])
         self.config["confidence"] = round(float(self.confidence_var.get()), 3)
         if hasattr(self, "acc_panel") and self.acc_panel:
             self.acc_panel.set_confidence_threshold(self.config["confidence"])
         new_app = self.app_combo.current()
+
+        previous_app = int(self.config.get("app", 0))
 
         if self.connected:
             self.send(f"SET:loclen:{self.config['loclen']}")
@@ -889,15 +1159,14 @@ class OOK48GUI:
             self.send(f"SET:halfrate:{self.config['halfrate']}")
             self.send(f"SET:morsewpm:{self.config['morsewpm']}")
             self.send(f"SET:confidence:{self.config['confidence']:.3f}")
-            if new_app != self.config["app"]:
-                if messagebox.askyesno("Change App", "Changing app requires a reboot. Continue?"):
-                    self.config["app"] = new_app
-                    self.send(f"SET:app:{new_app}")
-        else:
-            self.config["app"] = new_app
+            if new_app != previous_app:
+                self.send(f"SET:app:{new_app}")
+                self.bottom_status.config(text=f"Switching to {APP_NAMES[new_app]}…")
+        self.config["app"] = new_app
         self.save_config()
         self._sync_app_dependent_ui()
-        self.bottom_status.config(text="Settings applied")
+        if not self.connected:
+            self.bottom_status.config(text="Settings applied")
 
     def _sync_app_dependent_ui(self):
         app_text = ""
@@ -908,14 +1177,45 @@ class OOK48GUI:
             if 0 <= idx < len(APP_NAMES):
                 app_text = APP_NAMES[idx]
 
-        hide_acc = ("morse" in app_text.lower())
+        show_morse = ("morse" in app_text.lower())
 
         if hasattr(self, "acc_panel") and self.acc_panel:
             is_visible = (self.acc_panel.winfo_manager() == "pack")
-            if hide_acc and is_visible:
+            if show_morse and is_visible:
                 self.acc_panel.pack_forget()
-            elif (not hide_acc) and (not is_visible):
+            elif (not show_morse) and (not is_visible):
                 self.acc_panel.pack(fill=tk.X, pady=(4, 0), before=self.decode_frame)
+
+        if hasattr(self, "morse_panel") and self.morse_panel:
+            morse_visible = (self.morse_panel.winfo_manager() == "pack")
+            if show_morse and (not morse_visible):
+                self.morse_panel.pack(fill=tk.X, pady=(4, 0), before=self.decode_frame)
+            elif (not show_morse) and morse_visible:
+                self.morse_panel.pack_forget()
+
+        self._refresh_morse_panel()
+
+    def apply_morse_panel_wpm(self, _event=None):
+        try:
+            wpm = int(self.morse_panel_wpm_var.get())
+        except Exception:
+            wpm = int(self.config.get("morsewpm", 12))
+
+        wpm = max(5, min(40, wpm))
+        self.morse_panel_wpm_var.set(wpm)
+        self.config["morsewpm"] = wpm
+
+        if hasattr(self, "morsewpm_var"):
+            self.morsewpm_var.set(wpm)
+
+        if self.connected:
+            self.send(f"SET:morsewpm:{wpm}")
+            self.bottom_status.config(text=f"Morse TX WPM set to {wpm}")
+        else:
+            self.bottom_status.config(text=f"Morse TX WPM saved ({wpm})")
+
+        self.save_config()
+        return "break"
 
         if hasattr(self, "conf_spin") and self.conf_spin:
             self.conf_spin.config(state="normal")
@@ -936,6 +1236,7 @@ class OOK48GUI:
                 self.config["decmode"] = 0
                 decmode = 0
             self.dm_combo.current(1 if decmode == 2 else 0)
+        self._refresh_morse_panel()
 
     def on_main_decode_toggle(self):
         """Main-page quick toggle: Normal (0) <-> Rainscatter (2)."""

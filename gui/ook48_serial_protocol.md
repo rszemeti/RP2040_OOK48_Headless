@@ -62,6 +62,10 @@ All commands are sent as one ASCII line plus trailing LF.
   - `1` = JT4G Decoder
   - `2` = PI4 Decoder
   - `3` = Morse
+- Runtime behavior (current firmware):
+  - App switch is live (no reboot required).
+  - Firmware emits `EVT:APPPENDING:<id>` when switching starts.
+  - Firmware emits `EVT:APP:<id>` when the new app is active.
 
 ### `SET:msg:<slot>:<text>`
 - `slot`: currently `0..9`
@@ -148,6 +152,15 @@ Recommended version payload (for firmware team):
 
 ### `PI:<text>`
 - PI4 decoder log line
+
+### `EVT:APPPENDING:<id>`
+- App switch has been requested and is in progress.
+- `<id>` uses the same app indices as `SET:app`.
+
+### `EVT:APP:<id>`
+- Active app confirmation/notification.
+- Emitted on boot/identify and after successful app switch.
+- `<id>` uses the same app indices as `SET:app`.
 
 ### `WF:<csv_ints>`
 - Waterfall row values

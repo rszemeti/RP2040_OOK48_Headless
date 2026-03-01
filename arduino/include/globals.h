@@ -82,6 +82,7 @@ extern float    sftMagnitudes[CACHESIZE];  // soft magnitudes for SFT: serial ou
 extern MorseRxDecoder morseDecoder;
 extern char  morseDecoded;   // last decoded char/space, cross-core via FIFO
 extern float morseWpmEst;    // WPM at lock, for status display
+extern float morseCentroidHz; // tracked Morse centroid frequency (Hz), for WF marker
 extern uint32_t dmaTransferCount;  // set by RxInit(), read by dma_init()
 
 // GPS

@@ -8,6 +8,8 @@ extern ArduinoFFT<float> FFT;
 void calcSpectrum(void)
 {
     int bin;
+    float frameSum = 0.0f;
+    float frameMean;
     float peak = 0.0f;
     for (int i = 0; i < NUMBEROFOVERSAMPLES; i = i + OVERSAMPLE)
     {
@@ -16,6 +18,14 @@ void calcSpectrum(void)
         for (int s = 0; s < OVERSAMPLE; s++)
             sample[bin] += buffer[bufIndex][i + s] - 2048;
         sample[bin] = sample[bin] / OVERSAMPLE;
+        frameSum += sample[bin];
+        sampleI[bin] = 0;
+    }
+
+    frameMean = frameSum / NUMBEROFSAMPLES;
+    for (int bin = 0; bin < NUMBEROFSAMPLES; bin++)
+    {
+        sample[bin] -= frameMean;
         sampleI[bin] = 0;
         float a = sample[bin] < 0 ? -sample[bin] : sample[bin];
         if (a > peak) peak = a;
@@ -45,6 +55,8 @@ static ArduinoFFT<float> MorseFFT(sample, sampleI, MORSE_FFT_SIZE, (float)SAMPLE
 
 void calcMorseSpectrum(void)
 {
+    float frameSum = 0.0f;
+    float frameMean;
     float peak = 0.0f;
     for (int i = 0; i < MORSE_FRAME_SAMPLES; i += OVERSAMPLE)
     {
@@ -53,6 +65,14 @@ void calcMorseSpectrum(void)
         for (int s = 0; s < OVERSAMPLE; s++)
             sample[bin] += (float)buffer[bufIndex][i + s] - 2048.0f;
         sample[bin] /= (float)OVERSAMPLE;
+        frameSum += sample[bin];
+        sampleI[bin] = 0.0f;
+    }
+
+    frameMean = frameSum / (float)MORSE_FFT_SIZE;
+    for (int bin = 0; bin < MORSE_FFT_SIZE; bin++)
+    {
+        sample[bin] -= frameMean;
         sampleI[bin] = 0.0f;
         float a = sample[bin] < 0 ? -sample[bin] : sample[bin];
         if (a > peak) peak = a;

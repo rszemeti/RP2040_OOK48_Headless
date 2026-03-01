@@ -22,6 +22,7 @@ void RxInit(void)
     toneTolerance    = 3;
     numberOfTones    = 1;
     morseDecoder.begin(MORSE_FRAME_RATE, MORSE_MIN_WPM, MORSE_MAX_WPM, MORSE_TONE_BIN);
+    morseCentroidHz = (float)(MORSE_TONE_BIN * (SAMPLERATE / MORSE_FFT_SIZE));
   }
   else
   {
@@ -45,6 +46,7 @@ void RxInit(void)
 // Waterfall accumulator for morse mode (file-static, persists across calls)
 static float  morseWfAccum[MORSE_FFT_BINS] = {};
 static uint8_t morseWfCount = 0;
+static float morseCentroidFiltBin = (float)MORSE_TONE_BIN;
 
 void RxTick(void)
 {
@@ -56,12 +58,71 @@ void RxTick(void)
     lastDma = millis();
     calcMorseSpectrum();
 
+    const float binHz = (float)SAMPLERATE / (float)MORSE_FFT_SIZE;
+    bool morseRainscatter = (settings.decodeMode == RAINSCATTERMODE);
+
+    if (!morseRainscatter)
+    {
+      // Track centroid around expected Morse tone and smooth for stable GUI marker.
+      // Use local energy weighting in a narrow band to avoid whole-spectrum bias.
+      int lo = MORSE_TONE_BIN - 10;
+      int hi = MORSE_TONE_BIN + 10;
+      if (lo < 1) lo = 1;
+      if (hi > MORSE_FFT_BINS - 2) hi = MORSE_FFT_BINS - 2;
+
+      float weighted = 0.0f;
+      float sumMag = 0.0f;
+      for (int b = lo; b <= hi; b++)
+      {
+        float m = magnitude[b];
+        if (m < 0.0f) m = 0.0f;
+        weighted += (float)b * m;
+        sumMag += m;
+      }
+
+      if (sumMag > 0.0f)
+      {
+        float centroidBin = weighted / sumMag;
+        morseCentroidFiltBin = morseCentroidFiltBin * 0.75f + centroidBin * 0.25f;
+      }
+
+      morseCentroidHz = morseCentroidFiltBin * binHz;
+    }
+    else
+    {
+      // In rainscatter mode we deliberately avoid single-tone tracking.
+      morseCentroidHz = 0.0f;
+    }
+
     // Accumulate bin magnitudes for waterfall
     for (int i = 0; i < MORSE_FFT_BINS; i++)
       morseWfAccum[i] += magnitude[i];
 
-    // Feed morse decoder with this frame's tone bin magnitude
-    int n = morseDecoder.feed(magnitude[MORSE_TONE_BIN]);
+    // Feed morse decoder:
+    //  - normal mode: nominal tone bin magnitude
+    //  - rainscatter mode: wideband power sum above ~200 Hz (avoid DC/very-low bins)
+    float decoderMag;
+    if (!morseRainscatter)
+    {
+      decoderMag = magnitude[MORSE_TONE_BIN];
+    }
+    else
+    {
+      int lowBin = (int)(200.0f / binHz);
+      if (((float)lowBin * binHz) < 200.0f) lowBin++;
+      if (lowBin < 1) lowBin = 1;
+      if (lowBin > MORSE_FFT_BINS - 1) lowBin = MORSE_FFT_BINS - 1;
+
+      float p = 0.0f;
+      for (int b = lowBin; b < MORSE_FFT_BINS; b++)
+      {
+        float m = magnitude[b];
+        if (m > 0.0f) p += m;
+      }
+      decoderMag = p;
+    }
+
+    int n = morseDecoder.feed(decoderMag);
     for (int i = 0; i < n; i++)
     {
       MorseEvent ev = morseDecoder.event(i);

@@ -37,7 +37,7 @@ void dma_init(void)
     adc_select_input(ADC_CHAN);
     adc_fifo_setup(true, true, 1, false, false);
     adc_set_clkdiv(48000000 / sampleRate);
-    uint dma_chan = dma_claim_unused_channel(true);
+    dma_chan = dma_claim_unused_channel(true);
     dma_channel_config cfg = dma_channel_get_default_config(dma_chan);
     channel_config_set_transfer_data_size(&cfg, DMA_SIZE_16);
     channel_config_set_read_increment(&cfg, false);

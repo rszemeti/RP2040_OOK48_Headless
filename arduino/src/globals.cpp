@@ -41,6 +41,7 @@ float    sftMagnitudes[CACHESIZE];   // soft magnitudes copied here before SFTME
 MorseRxDecoder morseDecoder;
 char     morseDecoded = ' ';
 float    morseWpmEst  = 0.0f;
+float    morseCentroidHz = (float)(MORSE_TONE_BIN * (SAMPLERATE / MORSE_FFT_SIZE));
 uint32_t dmaTransferCount = NUMBEROFOVERSAMPLES;  // default; overridden by RxInit()
 
 char     gpsBuffer[256];
