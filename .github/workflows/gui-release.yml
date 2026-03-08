@@ -1,0 +1,47 @@
+name: GUI Release (Onefile EXE)
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-gui-exe:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Create venv and install GUI build deps
+        shell: pwsh
+        run: |
+          python -m venv .venv
+          .\.venv\Scripts\python -m pip install --upgrade pip
+          .\.venv\Scripts\python -m pip install -r gui\requirements.txt pyinstaller
+
+      - name: Build onefile GUI EXE
+        shell: pwsh
+        run: .\scripts\build_gui_release.ps1
+
+      - name: Upload GUI EXE artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gui-exe
+          path: dist/OOK48_GUI.exe
+
+      - name: Attach GUI EXE to GitHub Release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/OOK48_GUI.exe
