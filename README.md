@@ -119,6 +119,29 @@ indicator during transmit — exactly as before, just without anything else on s
 Protocol details for firmware/GUI integration are in `gui/ook48_serial_protocol.md`
 and `Documents/ook48_serial_protocol.md`.
 
+### Core-to-core FIFO char payload convention
+
+To avoid races when Core 0 produces character events faster than Core 1 can consume them,
+character-bearing FIFO messages are packed into one 32-bit word:
+
+- low 16 bits: Core1Message command ID
+- high 16 bits: associated character payload (8-bit char value)
+
+Helpers are defined in `arduino/include/globals.h`:
+
+- `FIFO_COMMAND(word)`
+- `PACK_FIFO_CHAR(cmd, ch)`
+- `UNPACK_FIFO_CHAR(word)`
+
+Current packed char messages:
+
+- `MORSEMESSAGE`
+- `MESSAGE`
+- `TMESSAGE`
+
+This prevents shared-variable overwrite issues (for example, Morse CHAR followed quickly by WORD_SEP)
+because command and payload travel atomically in the same FIFO entry.
+
 ---
 
 ## Firmware Releases (UF2)

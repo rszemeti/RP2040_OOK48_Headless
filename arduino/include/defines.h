@@ -8,7 +8,7 @@
 #define TXPIN       6       // Transmit output pin
 #define KEYPIN      7       // Key output pin
 #define PPSINPUT    3       // 1PPS signal from GPS
-#define ADC_CHAN    0       // ADC2 on GPIO28 - audio input from receiver (DC biased to Vcc/2)
+#define ADC_CHAN    2       // ADC0 on GPIO26 - audio input from receiver (DC biased to Vcc/2)
 
 // OOK48 detection parameters
 // Spectrum: 495Hz to 1098Hz, tone at 800Hz

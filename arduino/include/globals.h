@@ -39,6 +39,12 @@ enum Apps         { OOK48, BEACONJT4, BEACONPI4, MORSEMODE };
 enum Modes        { RX, TX };
 enum BModes       { JT4, PI4 };
 
+// Packed FIFO helpers (low 16 bits = command, high 16 bits = payload char)
+#define FIFO_CMD_MASK       0xFFFFu
+#define FIFO_COMMAND(word)  ((uint16_t)((word) & FIFO_CMD_MASK))
+#define PACK_FIFO_CHAR(cmd, ch) ((uint32_t)(uint16_t)(cmd) | ((uint32_t)(uint8_t)(ch) << 16))
+#define UNPACK_FIFO_CHAR(word)  ((char)(uint8_t)((word) >> 16))
+
 // ---------------------------------------------------------------------------
 // Global variables - defined in globals.cpp
 // ---------------------------------------------------------------------------

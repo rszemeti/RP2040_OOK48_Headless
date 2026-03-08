@@ -128,8 +128,8 @@ void RxTick(void)
       MorseEvent ev = morseDecoder.event(i);
       if (ev.kind == MorseEvt::CHAR || ev.kind == MorseEvt::WORD_SEP)
       {
-        morseDecoded = ev.ch;
-        rp2040.fifo.push(MORSEMESSAGE);
+        // Packed FIFO char message format documented in README (Core-to-core FIFO char payload convention).
+        rp2040.fifo.push(PACK_FIFO_CHAR(MORSEMESSAGE, ev.ch));
       }
       else if (ev.kind == MorseEvt::LOCKED)
       {
@@ -175,7 +175,8 @@ void RxTick(void)
           if(PPSActive)                                         //decodes are only valid if the PPS Pulse is present
           {
             decodeCache();                                      //extract the character
-            rp2040.fifo.push(MESSAGE);                         //Ask Core 1 to display it
+            // Packed FIFO char message format documented in README (Core-to-core FIFO char payload convention).
+            rp2040.fifo.push(PACK_FIFO_CHAR(MESSAGE, decoded)); // Ask Core 1 to display it
           }
         }
       dmaReady = false;                                         //Clear the flag ready for next time
@@ -191,9 +192,15 @@ int findBestBin(void)
   float bestRange;
   int topBin;
 
+  if (numberOfBins <= 0) return 0;
+  int lo = rxTone - toneTolerance;
+  int hi = rxTone + toneTolerance;
+  if (lo < 0) lo = 0;
+  if (hi > (numberOfBins - 1)) hi = numberOfBins - 1;
+
   bestRange =0;
-  topBin = 0;
-  for(int b=rxTone - toneTolerance ; b < rxTone + toneTolerance; b++)        //search each possible bin in the search range
+  topBin = lo;
+  for(int b = lo; b <= hi; b++)        //search each possible bin in the search range
     {
       max = 0 - FLT_MAX;
       min = FLT_MAX;
@@ -217,8 +224,14 @@ int findBestBin(void)
 float findLargest(int timeslot)
 {
   float max;
+  if (numberOfBins <= 0) return 0.0f;
+  int lo = rxTone - toneTolerance;
+  int hi = rxTone + toneTolerance;
+  if (lo < 0) lo = 0;
+  if (hi > (numberOfBins - 1)) hi = numberOfBins - 1;
+
   max = 0 - FLT_MAX;
-  for(int b=rxTone - toneTolerance ; b < rxTone + toneTolerance; b++)        //search each possible bin in the search range to find the largest magnitude
+  for(int b = lo; b <= hi; b++)        //search each possible bin in the search range to find the largest magnitude
     {
       if(toneCache[b][timeslot] > max) max = toneCache[b][timeslot];
     }
@@ -289,8 +302,9 @@ bool decodeCache(void)
     while(j >= 0 && sorted[j] < key) { sorted[j+1] = sorted[j]; j--; }
     sorted[j+1] = key;
   }
-  float range      = sorted[0] - sorted[7];
-  float confidence = (range > 0.0f) ? (sorted[3] - sorted[4]) / range : 0.0f;
+  int split = CACHESIZE / 2;
+  float range      = sorted[0] - sorted[CACHESIZE - 1];
+  float confidence = (range > 0.0f) ? (sorted[split - 1] - sorted[split]) / range : 0.0f;
 
   // Find the four largest magnitudes and record their bit positions
   for(int l = 0; l < 4; l++)

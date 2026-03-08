@@ -320,7 +320,8 @@ void loop1()
 
     if (rp2040.fifo.pop_nb(&command))
     {
-        switch (command)
+        // Packed FIFO char message format documented in README (Core-to-core FIFO char payload convention).
+        switch (FIFO_COMMAND(command))
         {
         case GENPLOT:
             generatePlotData();
@@ -335,12 +336,14 @@ void loop1()
             Serial.println("MRK:CYN");
             break;
         case MESSAGE:
+            decoded = UNPACK_FIFO_CHAR(command);
             Serial.print("MSG:");
             if      (decoded == '\r')  Serial.println("<CR>");
             else if (decoded == 0x7E)  Serial.println("<UNK>");
             else                       Serial.println(String(decoded));
             break;
         case TMESSAGE:
+            TxCharSent = UNPACK_FIFO_CHAR(command);
             Serial.print("TX:");
             Serial.println(TxCharSent == '\r' ? "<CR>" : String(TxCharSent));
             break;
@@ -365,6 +368,7 @@ void loop1()
             Serial.println();
             break;
         case MORSEMESSAGE:
+            morseDecoded = UNPACK_FIFO_CHAR(command);
             Serial.print("MCH:");
             if      (morseDecoded == ' ')  Serial.println("<SP>");
             else if (morseDecoded == '?')  Serial.println("<UNK>");
