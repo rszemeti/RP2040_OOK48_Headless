@@ -101,6 +101,17 @@ class OOK48GUI:
         self.morse_last_char = "--"
         self.wf_marker_hz = None
         self.morse_track_hz = None
+        self.gps_time_str = "--:--:--"
+        self.gps_state = "--"
+        self.gps_fix_quality = 0
+        self.gps_fix_valid = False
+        self.gps_sats_used = 0
+        self.gps_sats_view = 0
+        self.gps_hdop = 99.9
+        self.gps_age_ms = 0
+        self.gps_last_sentence = "--"
+        self.gps_uptime_start = None
+        self.gps_lock_start = None
 
         self.build_ui()
         self.refresh_ports()
@@ -212,6 +223,8 @@ class OOK48GUI:
 
         self.gps_label = ttk.Label(conn_frame, text="GPS: --:--:--", foreground="grey")
         self.gps_label.pack(side=tk.RIGHT, padx=10)
+        self.gps_state_label = ttk.Label(conn_frame, text="GPS State: --", foreground="grey")
+        self.gps_state_label.pack(side=tk.RIGHT, padx=6)
         self.loc_label = ttk.Label(conn_frame, text="", foreground="grey")
         self.loc_label.pack(side=tk.RIGHT, padx=5)
         self.remote_fw_label = ttk.Label(conn_frame, text="Remote FW: --", foreground="grey")
@@ -238,6 +251,11 @@ class OOK48GUI:
         cfg_tab = ttk.Frame(nb)
         nb.add(cfg_tab, text="Settings")
         self.build_settings_tab(cfg_tab)
+
+        # Tab 3: GPS
+        gps_tab = ttk.Frame(nb)
+        nb.add(gps_tab, text="GPS")
+        self.build_gps_tab(gps_tab)
 
         # Bottom status bar
         status_bar = tk.Frame(self.root, bd=1, relief=tk.SUNKEN, bg="#d9d9d9", height=24)
@@ -511,6 +529,59 @@ class OOK48GUI:
         ttk.Button(btn_frame, text="Reboot Device", command=self.reboot_device).pack(side=tk.LEFT, padx=5)
 
         self._sync_app_dependent_ui()
+
+    def build_gps_tab(self, parent):
+        frame = ttk.Frame(parent)
+        frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+        summary = ttk.LabelFrame(frame, text="GPS Summary", padding=8)
+        summary.pack(fill=tk.X)
+
+        ttk.Label(summary, text="State:").grid(row=0, column=0, sticky=tk.W, padx=(0, 8), pady=3)
+        self.gps_state_value = ttk.Label(summary, text="--", foreground="grey")
+        self.gps_state_value.grid(row=0, column=1, sticky=tk.W, pady=3)
+
+        ttk.Label(summary, text="Fix quality:").grid(row=0, column=2, sticky=tk.W, padx=(24, 8), pady=3)
+        self.gps_fixq_value = ttk.Label(summary, text="0", foreground="grey")
+        self.gps_fixq_value.grid(row=0, column=3, sticky=tk.W, pady=3)
+
+        ttk.Label(summary, text="Fix valid:").grid(row=1, column=0, sticky=tk.W, padx=(0, 8), pady=3)
+        self.gps_fixvalid_value = ttk.Label(summary, text="No", foreground="grey")
+        self.gps_fixvalid_value.grid(row=1, column=1, sticky=tk.W, pady=3)
+
+        ttk.Label(summary, text="Satellites used:").grid(row=1, column=2, sticky=tk.W, padx=(24, 8), pady=3)
+        self.gps_sats_used_value = ttk.Label(summary, text="0", foreground="grey")
+        self.gps_sats_used_value.grid(row=1, column=3, sticky=tk.W, pady=3)
+
+        ttk.Label(summary, text="Satellites in view:").grid(row=2, column=0, sticky=tk.W, padx=(0, 8), pady=3)
+        self.gps_sats_view_value = ttk.Label(summary, text="0", foreground="grey")
+        self.gps_sats_view_value.grid(row=2, column=1, sticky=tk.W, pady=3)
+
+        ttk.Label(summary, text="HDOP:").grid(row=2, column=2, sticky=tk.W, padx=(24, 8), pady=3)
+        self.gps_hdop_value = ttk.Label(summary, text="--", foreground="grey")
+        self.gps_hdop_value.grid(row=2, column=3, sticky=tk.W, pady=3)
+
+        ttk.Label(summary, text="Last sentence:").grid(row=3, column=0, sticky=tk.W, padx=(0, 8), pady=3)
+        self.gps_sentence_value = ttk.Label(summary, text="--", foreground="grey")
+        self.gps_sentence_value.grid(row=3, column=1, sticky=tk.W, pady=3)
+
+        ttk.Label(summary, text="Last update age:").grid(row=3, column=2, sticky=tk.W, padx=(24, 8), pady=3)
+        self.gps_age_value = ttk.Label(summary, text="--", foreground="grey")
+        self.gps_age_value.grid(row=3, column=3, sticky=tk.W, pady=3)
+
+        ttk.Label(summary, text="GPS uptime:").grid(row=4, column=0, sticky=tk.W, padx=(0, 8), pady=3)
+        self.gps_uptime_value = ttk.Label(summary, text="--", foreground="grey")
+        self.gps_uptime_value.grid(row=4, column=1, sticky=tk.W, pady=3)
+
+        ttk.Label(summary, text="Lock duration:").grid(row=4, column=2, sticky=tk.W, padx=(24, 8), pady=3)
+        self.gps_lock_duration_value = ttk.Label(summary, text="--", foreground="grey")
+        self.gps_lock_duration_value.grid(row=4, column=3, sticky=tk.W, pady=3)
+
+        raw_frame = ttk.LabelFrame(frame, text="Telemetry", padding=4)
+        raw_frame.pack(fill=tk.BOTH, expand=True, pady=(10, 0))
+        self.gps_telemetry_text = scrolledtext.ScrolledText(raw_frame, font=("Courier", 10), height=10)
+        self.gps_telemetry_text.pack(fill=tk.BOTH, expand=True)
+        self.gps_telemetry_text.config(state=tk.DISABLED)
 
     # ------------------------------------------------------------------
     # Waterfall tab
@@ -791,6 +862,7 @@ class OOK48GUI:
             self.remote_fw_label.config(text="Remote FW: --", foreground="grey")
         self.level_bar["value"] = 0
         self.level_label.config(text="--", foreground="grey")
+        self._reset_gps_status()
         self.update_tx_button()
         self.log("[SYS] Disconnected", "sys")
 
@@ -823,6 +895,8 @@ class OOK48GUI:
             self.handle_app_event(line[8:])
         elif line.startswith("STA:"):
             self.update_status(line[4:])
+        elif line.startswith("GPS:"):
+            self.handle_gps_status(line[4:])
         elif line.startswith("MSG:"):
             char = line[4:]
             self.append_decode(char, "rx")
@@ -1049,10 +1123,11 @@ class OOK48GUI:
         parts = payload.split(",")
         if len(parts) >= 4:
             time_str = parts[0]
+            self.gps_time_str = time_str
             locator = parts[3] if len(parts) > 3 else ""
             tx_flag = parts[4] if len(parts) > 4 else "0"
-            self.gps_label.config(text=f"GPS: {time_str}",
-                                  foreground="darkgreen" if time_str != "--:--:--" else "grey")
+            self.gps_label.config(text=f"GPS: {time_str}")
+            self._refresh_gps_topbar()
             self.current_loc = locator
             self.loc_label.config(text=locator)
             self.refresh_qso_buttons()
@@ -1075,6 +1150,152 @@ class OOK48GUI:
                     self.level_label.config(text=text, foreground=color)
                 except ValueError:
                     pass
+
+    def _reset_gps_status(self):
+        self.gps_time_str = "--:--:--"
+        self.gps_state = "--"
+        self.gps_fix_quality = 0
+        self.gps_fix_valid = False
+        self.gps_sats_used = 0
+        self.gps_sats_view = 0
+        self.gps_hdop = 99.9
+        self.gps_age_ms = 0
+        self.gps_last_sentence = "--"
+        self.gps_uptime_start = None
+        self.gps_lock_start = None
+        self.gps_label.config(text="GPS: --:--:--", foreground="grey")
+        self._refresh_gps_topbar()
+        self._refresh_gps_panel()
+        if hasattr(self, "gps_telemetry_text") and self.gps_telemetry_text:
+            self.gps_telemetry_text.config(state=tk.NORMAL)
+            self.gps_telemetry_text.delete("1.0", tk.END)
+            self.gps_telemetry_text.config(state=tk.DISABLED)
+
+    def _refresh_gps_panel(self):
+        if not hasattr(self, "gps_state_value"):
+            return
+
+        ok = (self.gps_state == "LOCKED")
+        warn = (self.gps_state == "SEARCH")
+        color = "darkgreen" if ok else "orange" if warn else "grey"
+
+        self.gps_state_value.config(text=self.gps_state, foreground=color)
+        self.gps_fixq_value.config(text=str(self.gps_fix_quality), foreground=color)
+        self.gps_fixvalid_value.config(text="Yes" if self.gps_fix_valid else "No", foreground=color)
+        self.gps_sats_used_value.config(text=str(self.gps_sats_used), foreground=color)
+        self.gps_sats_view_value.config(text=str(self.gps_sats_view), foreground=color)
+        self.gps_hdop_value.config(text=f"{self.gps_hdop:.1f}", foreground=color)
+        self.gps_sentence_value.config(text=self.gps_last_sentence, foreground=color)
+        self.gps_age_value.config(text=f"{self.gps_age_ms} ms", foreground=color)
+
+        now = time.monotonic()
+        uptime_text = "--" if self.gps_uptime_start is None else self._format_duration(now - self.gps_uptime_start)
+        lock_text = "--" if self.gps_lock_start is None else self._format_duration(now - self.gps_lock_start)
+        self.gps_uptime_value.config(text=uptime_text, foreground=color)
+        self.gps_lock_duration_value.config(text=lock_text, foreground=color)
+
+    def _format_duration(self, seconds):
+        total = max(0, int(seconds))
+        hh = total // 3600
+        mm = (total % 3600) // 60
+        ss = total % 60
+        return f"{hh:02d}:{mm:02d}:{ss:02d}"
+
+    def _refresh_gps_topbar(self):
+        state = (self.gps_state or "--").upper()
+        if state == "LOCKED":
+            state_color = "darkgreen"
+        elif state == "SEARCH":
+            state_color = "orange"
+        elif state == "NO-DATA":
+            state_color = "red"
+        else:
+            state_color = "grey"
+
+        if hasattr(self, "gps_state_label"):
+            self.gps_state_label.config(text=f"GPS State: {state}", foreground=state_color)
+
+        if state == "NO-DATA":
+            time_color = "red"
+        elif state == "SEARCH":
+            time_color = "orange"
+        elif self.gps_time_str != "--:--:--":
+            time_color = "darkgreen"
+        else:
+            time_color = "grey"
+        self.gps_label.config(foreground=time_color)
+
+    def _append_gps_telemetry(self, payload):
+        if not hasattr(self, "gps_telemetry_text") or not self.gps_telemetry_text:
+            return
+        ts = datetime.utcnow().strftime("%H:%M:%S")
+        self.gps_telemetry_text.config(state=tk.NORMAL)
+        self.gps_telemetry_text.insert(tk.END, f"[{ts}z] GPS:{payload}\n")
+        self.gps_telemetry_text.see(tk.END)
+
+        max_lines = 250
+        try:
+            line_count = int(float(self.gps_telemetry_text.index("end-1c").split(".")[0]))
+            if line_count > max_lines:
+                trim_to = line_count - max_lines
+                self.gps_telemetry_text.delete("1.0", f"{trim_to}.0")
+        except Exception:
+            pass
+        self.gps_telemetry_text.config(state=tk.DISABLED)
+
+    def handle_gps_status(self, payload):
+        prev_state = self.gps_state
+        parts = [p.strip() for p in payload.split(",")]
+        if len(parts) < 9:
+            return
+
+        self.gps_state = parts[0] or "--"
+        try:
+            self.gps_fix_quality = int(parts[1])
+        except ValueError:
+            self.gps_fix_quality = 0
+
+        self.gps_fix_valid = (parts[2] == "1")
+
+        try:
+            self.gps_sats_used = int(parts[3])
+        except ValueError:
+            self.gps_sats_used = 0
+
+        try:
+            self.gps_sats_view = int(parts[4])
+        except ValueError:
+            self.gps_sats_view = 0
+
+        try:
+            self.gps_hdop = float(parts[5])
+        except ValueError:
+            self.gps_hdop = 99.9
+
+        try:
+            self.gps_age_ms = int(parts[6])
+        except ValueError:
+            self.gps_age_ms = 0
+
+        self.gps_last_sentence = parts[7] or "--"
+
+        now = time.monotonic()
+        if self.gps_uptime_start is None and self.gps_state != "--":
+            self.gps_uptime_start = now
+        if self.gps_state == "LOCKED":
+            if prev_state != "LOCKED" or self.gps_lock_start is None:
+                self.gps_lock_start = now
+        else:
+            self.gps_lock_start = None
+
+        locator = parts[8] if len(parts) > 8 else ""
+        if locator and locator != "----------":
+            self.current_loc = locator
+            self.loc_label.config(text=locator)
+
+        self._refresh_gps_topbar()
+        self._refresh_gps_panel()
+        self._append_gps_telemetry(payload)
 
     # ------------------------------------------------------------------
     # Config push to firmware

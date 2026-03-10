@@ -125,6 +125,18 @@ Recommended version payload (for firmware team):
 - `parts[1]` and `parts[2]` are currently ignored by GUI
 - Minimum useful length: at least 4 CSV fields
 
+### `GPS:<csv>`
+- GPS health/status CSV parsed as:
+  - `parts[0]` = state (`LOCKED`, `SEARCH`, or `NO-DATA`)
+  - `parts[1]` = fix quality (GGA field 6)
+  - `parts[2]` = fix valid flag (`1`/`0`)
+  - `parts[3]` = satellites used (GGA field 7)
+  - `parts[4]` = satellites in view (GSV field 3)
+  - `parts[5]` = HDOP (GGA field 8)
+  - `parts[6]` = age of last NMEA sentence (ms)
+  - `parts[7]` = last NMEA sentence type (`RMC`, `GGA`, `GSV`, etc.)
+  - `parts[8]` = current Maidenhead locator
+
 ### `MSG:<char_or_token>`
 - RX decoded character stream element
 - Special token recognized: `<CR>` means end-of-message boundary in GUI

@@ -25,6 +25,7 @@
 // Firmware sends:
 //   RDY:<version>                              on boot, ready for config push
 //   STA:<hh>:<mm>:<ss>,<lat>,<lon>,<loc>,<tx>,<level>  status once per second  (level=RX audio 0-100)
+//   GPS:<state>,<fixq>,<fix>,<used>,<view>,<hdop>,<age_ms>,<last>,<loc>    GPS health/quality once per second
 //   WF:<v0>,<v1>,...,<vN>[,<centroidHz>]       waterfall line; Morse mode appends centroid frequency (Hz)
 //   MRK:RED                                    mark waterfall at end of RX period
 //   MRK:CYN                                    mark waterfall at start of minute
@@ -71,11 +72,14 @@ struct repeating_timer PPSIntervalTimer;
 // ---------------------------------------------------------------------------
 void defaultSettings(void);
 void sendStatus(void);
+void sendGpsStatus(void);
 void sendWaterfall(void);
 void processSerial(void);
 void handleCommand(char *cmd);
 void processNMEA(void);
 bool RMCValid(void);
+void parseGGA(void);
+void parseGSV(void);
 float convertToDecimalDegrees(float dddmm_mmm);
 void convertToMaid(void);
 void replaceToken(char *news, char *orig, char search, const char *rep);
@@ -313,6 +317,7 @@ void loop1()
     if ((gpsSec != lastSec) || (millis() > lastTimeUpdate + 2000))
     {
         sendStatus();
+        sendGpsStatus();
         if (PPSActive > 0) PPSActive--;
         lastSec = gpsSec;
         lastTimeUpdate = millis();
@@ -750,6 +755,32 @@ void sendStatus(void)
     Serial.println(s);
 }
 
+void sendGpsStatus(void)
+{
+    char s[128];
+    const bool gpsFresh = gpsLastSentenceMs > 0 && (millis() - gpsLastSentenceMs) < 4000;
+    const bool fix = gpsFresh && gpsFixValid && (gpsFixQuality > 0);
+    const char *state = !gpsFresh ? "NO-DATA" : (fix ? "LOCKED" : "SEARCH");
+
+    const int fixq = gpsFresh ? gpsFixQuality : 0;
+    const int satsUsed = gpsFresh ? gpsSatsUsed : 0;
+    const int satsView = gpsFresh ? gpsSatsInView : 0;
+    const float hdop = gpsFresh ? gpsHdop : 99.9f;
+    const uint32_t age = gpsLastSentenceMs > 0 ? (millis() - gpsLastSentenceMs) : 99999;
+
+    sprintf(s, "GPS:%s,%d,%d,%d,%d,%.1f,%lu,%s,%s",
+            state,
+            fixq,
+            (int)fix,
+            satsUsed,
+            satsView,
+            hdop,
+            (unsigned long)age,
+            gpsLastSentenceType,
+            qthLocator);
+    Serial.println(s);
+}
+
 // ---------------------------------------------------------------------------
 // Settings defaults
 // ---------------------------------------------------------------------------
@@ -776,13 +807,31 @@ void defaultSettings(void)
 void processNMEA(void)
 {
     float gpsTime, gpsDate;
+    gpsLastSentenceMs = millis();
     gpsActive = true;
-    if (RMCValid())
+
+    if (strlen(gpsBuffer) >= 6)
+    {
+        gpsLastSentenceType[0] = gpsBuffer[3];
+        gpsLastSentenceType[1] = gpsBuffer[4];
+        gpsLastSentenceType[2] = gpsBuffer[5];
+        gpsLastSentenceType[3] = 0;
+    }
+    else
+    {
+        strcpy(gpsLastSentenceType, "BAD");
+    }
+
+    if (!checksum(gpsBuffer))
+        return;
+
+    if ((gpsBuffer[3] == 'R') && (gpsBuffer[4] == 'M') && (gpsBuffer[5] == 'C'))
     {
         int p = strcspn(gpsBuffer, ",") + 1;
         p = p + strcspn(gpsBuffer + p, ",") + 1;
         if (gpsBuffer[p] == 'A')
         {
+            gpsFixValid = true;
             p = strcspn(gpsBuffer, ",") + 1;
             gpsTime = strtof(gpsBuffer + p, NULL);
             gpsSec = int(gpsTime) % 100; gpsTime /= 100;
@@ -811,11 +860,25 @@ void processNMEA(void)
         }
         else
         {
+            gpsFixValid = false;
             gpsSec = gpsMin = gpsHr = -1;
             latitude = longitude = 0;
             strcpy(qthLocator, "----------");
             qthLocator[settings.locatorLength] = '\0';
         }
+        return;
+    }
+
+    if ((gpsBuffer[3] == 'G') && (gpsBuffer[4] == 'G') && (gpsBuffer[5] == 'A'))
+    {
+        parseGGA();
+        return;
+    }
+
+    if ((gpsBuffer[3] == 'G') && (gpsBuffer[4] == 'S') && (gpsBuffer[5] == 'V'))
+    {
+        parseGSV();
+        return;
     }
 }
 
@@ -824,6 +887,64 @@ bool RMCValid(void)
     if ((gpsBuffer[3] == 'R') && (gpsBuffer[4] == 'M') && (gpsBuffer[5] == 'C'))
         return checksum(gpsBuffer);
     return false;
+}
+
+void parseGGA(void)
+{
+    const char *p = gpsBuffer;
+    int field = 0;
+    char token[16];
+    uint8_t ti = 0;
+
+    while (*p)
+    {
+        if (*p == ',' || *p == '*')
+        {
+            token[ti] = 0;
+            if (field == 6)
+                gpsFixQuality = atoi(token);
+            else if (field == 7)
+                gpsSatsUsed = atoi(token);
+            else if (field == 8)
+                gpsHdop = strtof(token, NULL);
+
+            ti = 0;
+            field++;
+            if (*p == '*') break;
+        }
+        else if (ti < (sizeof(token) - 1))
+        {
+            token[ti++] = *p;
+        }
+        p++;
+    }
+}
+
+void parseGSV(void)
+{
+    const char *p = gpsBuffer;
+    int field = 0;
+    char token[16];
+    uint8_t ti = 0;
+
+    while (*p)
+    {
+        if (*p == ',' || *p == '*')
+        {
+            token[ti] = 0;
+            if (field == 3)
+                gpsSatsInView = atoi(token);
+
+            ti = 0;
+            field++;
+            if (*p == '*') break;
+        }
+        else if (ti < (sizeof(token) - 1))
+        {
+            token[ti++] = *p;
+        }
+        p++;
+    }
 }
 
 float convertToDecimalDegrees(float dddmm_mmm)
