@@ -19,7 +19,7 @@ VSVersionInfo(
         StringStruct('FileDescription', 'OOK48 Serial Control GUI'),
         StringStruct('FileVersion', '1.0.0.157'),
         StringStruct('InternalName', 'OOK48_GUI'),
-        StringStruct('LegalCopyright', 'Colin Durbridge (G4EML), Robin Szemeti (G1YFG) | commit cee579e'),
+        StringStruct('LegalCopyright', 'Robin Szemeti (G1YFG), Colin Durbridge (G4EML),| commit cee579e'),
         StringStruct('OriginalFilename', 'OOK48_GUI.exe'),
         StringStruct('ProductName', 'OOK48 Headless GUI'),
         StringStruct('ProductVersion', '1.0.0.157'),
